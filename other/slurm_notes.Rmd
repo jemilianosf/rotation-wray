@@ -1,0 +1,122 @@
+---
+title: "slurm_notes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+# Info 
+Most of these are from:
+https://genome.duke.edu/sites/genome.duke.edu/files/HPC-SLURM-Best-Practices-for-HARDAC.pdf
+
+Only allowed to use:
+Only use up to 2 nodes worth of
+compute resources at a time
+Total Memory: 512GB
+Total CPUs: 64
+
+# Basic commands
+Login:
+
+```{bash}
+ssh jes157@hardac-login.genome.duke.edu
+```
+
+foreground jobs: 
+
+```{bash}
+srun hostname
+srun --mem=4G hostname
+
+```
+
+different queues 
+```{bash}
+srun -p all hostname
+```
+
+interactive
+```{bash}
+srun -p interactive --pty bash
+```
+
+batch jobs (i.e. qsub):
+```{bash}
+sbatch countgc.sh
+```
+
+qstat
+```{bash}
+squeue -u <netid>
+```
+
+qdel
+```{bash}
+scancel <JOBID>
+```
+
+history of jobs
+```{bash}
+sacct
+```
+
+Get actually used memory info for future requests
+```{bash}
+sacct -o JobName,State,MaxRSS,ReqMem,Elapsed 
+```
+
+Making scripts
+PBS -> SBATCH
+```{bash}
+#!/bin/bash
+#SBATCH --mem=400M
+#SBATCH --mail-type=END
+#SBATCH --mail-user=<your_email_address>
+```
+
+Break job into steps with srun
+```{bash}
+#!/bin/bash
+FILENAME=data/E2f1_dna.fasta
+srun cksum $FILENAME
+srun python fasta_gc.py $FILENAME
+```
+
+Job arrays
+
+```{bash}
+#!/bin/bash
+#SBATCH --mem=400M
+#SBATCH --array=1-5%2
+echo $SLURM_ARRAY_TASK_ID
+```
+
+
+```{bash}
+sbatch --array
+```
+
+How busy is the cluster?
+```{bash}
+sinfo
+```
+
+# Using modules
+https://genome.duke.edu/sites/genome.duke.edu/files/Using-and-Installing-Custom-Software-on-HARDAC-Env-Modules.pdf
+
+```{bash}
+module avail
+module load
+```
+
+R modules:
+must update R_LIBS_USER to install R modules. 
+
+*Looks more complicated than it should be to install R packages. 
+
+# Conda environments
+https://genome.duke.edu/sites/genome.duke.edu/files/Using-and-Installing-Custom-Software-on-HARDAC-Conda.pdf
+
+
