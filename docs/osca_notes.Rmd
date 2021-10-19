@@ -1,0 +1,113 @@
+---
+title: "osca_notes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Notes for Orchestrating Single Cell Analysis book 
+
+## Chapter 4: Data Infrastructure
+
+The SingleCellExperiment class:
+- Gene by Cells 
+
+Requisite libraries for the tutorial:
+```{r}
+BiocManager::install(c('SingleCellExperiment','scater', 'scran', 'uwot'))
+
+library("SingleCellExperiment")
+library("scater")
+library("scran")
+library("uwot")
+
+```
+
+Assays slot:
+
+```{r}
+counts_matrix <- data.frame(cell_1 = rpois(10, 10), 
+                    cell_2 = rpois(10, 10), 
+                    cell_3 = rpois(10, 30))
+rownames(counts_matrix) <- paste0("gene_", 1:10)
+counts_matrix <- as.matrix(counts_matrix) # must be a matrix object!
+
+```
+
+Construct single cell object, and access assay counts. 
+
+```{r}
+sce <- SingleCellExperiment(assays = list(counts = counts_matrix))
+
+counts(sce)
+assay(sce, "counts")
+```
+
+Add an assay, like a log transform of the count data:
+```{r}
+sce <- scater::logNormCounts(sce)
+assays(sce)
+```
+
+
+```{r}
+assays(sce)
+assay(sce, "logcounts")
+logcounts(sce)
+```
+
+Adding custom assays:
+```{r}
+counts_100 <- counts(sce) + 100
+assay(sce, "counts_100") <- counts_100 # assign a new entry to assays slot
+assays(sce) # new assay has now been added.
+
+```
+
+Adding metadata to annotate the columns. 
+
+This is stored in the colData slot, which is a DataFrame.
+```{r}
+cell_metadata <- data.frame(batch = c(1, 1, 2))
+rownames(cell_metadata) <- paste0("cell_", 1:3)
+colData(sce) <- DataFrame(cell_metadata)
+```
+
+
+Some functions will add columns to colData:
+```{r}
+sce <- scater::addPerCellQC(sce)
+colData(sce)
+
+```
+
+
+Now row data.
+
+There are rowData and rowRanges slots. 
+```{r}
+rowRanges(sce)
+rowData(sce)
+```
+
+Add info to rowData
+```{r}
+sce <- scater::addPerFeatureQC(sce)
+rowData(sce)
+
+```
+
+
+To populate the gene-wise rows, we can use an annotation:
+
+```{r}
+BiocManager::install("AnnotationHub")
+library(AnnotationHub)
+edb <- AnnotationHub()[["AH73881"]] # Human, Ensembl v97.
+genes(edb)[,2]
+
+```
+
+

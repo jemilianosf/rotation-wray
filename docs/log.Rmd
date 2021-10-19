@@ -1,0 +1,19 @@
+---
+title: "log"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Description
+High level overview of daily analyses / lab activities.
+
+# 2021-10-18
+
+- Set up rotation repos.
+- Started reading Orchestrating Single Cell Analyses with bioconductor:
+docs/osca_notes.Rmd
+
+# 2021-10-19
