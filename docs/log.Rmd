@@ -17,3 +17,10 @@ High level overview of daily analyses / lab activities.
 docs/osca_notes.Rmd
 
 # 2021-10-19
+
+- Set up cluster account / access. Added notes for useful slurm commands and how to use the cluster: other/slurm_notes.Rmd.
+- Found this review that might be useful: https://www.sciencedirect.com/science/article/pii/S0888754321000331?via%3Dihub
+- Apart from that review, went through a couple of chapters of osca.
+
+# 2021-10-19
+- Going through OSCA. 

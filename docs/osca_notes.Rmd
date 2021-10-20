@@ -8,6 +8,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Notes for Orchestrating Single Cell Analysis book 
+```{r}
+library(tidyverse)
+```
+
 
 ## Chapter 4: Data Infrastructure
 
@@ -103,11 +107,384 @@ rowData(sce)
 To populate the gene-wise rows, we can use an annotation:
 
 ```{r}
-BiocManager::install("AnnotationHub")
+
 library(AnnotationHub)
 edb <- AnnotationHub()[["AH73881"]] # Human, Ensembl v97.
 genes(edb)[,2]
 
 ```
+
+Single cell specific fields. 
+
+I.e. why did they implement a specific class and not just work with SummarizedExperiments. 
+
+reducedDims - Dimentionality reduction results.
+
+```{r}
+sce <- scater::logNormCounts(sce)
+sce <- scater::runPCA(sce)
+reducedDim(sce, "PCA")
+
+```
+
+```{r}
+sce <- scater::runTSNE(sce, perplexity = 0.1)
+reducedDim(sce, "TSNE")
+
+```
+
+Manually add reduced dims:
+```{r}
+u <- uwot::umap(t(logcounts(sce)), n_neighbors = 2)
+reducedDim(sce, "UMAP_uwot") <- u
+reducedDims(sce) # Now stored in the object.
+
+```
+
+The altExp slot is to store alternative experiments. 
+Like per cell spike-ins that we want to keep track separately from endogenous gene read counts.
+```{r}
+spike_counts <- cbind(cell_1 = rpois(5, 10), 
+    cell_2 = rpois(5, 10), 
+    cell_3 = rpois(5, 30))
+rownames(spike_counts) <- paste0("spike_", 1:5)
+spike_se <- SummarizedExperiment(list(counts=spike_counts))
+
+altExp(sce, "spike") <- spike_se
+altExps(sce)
+
+
+```
+
+
+Size factors 
+
+Stores per - cell scaling factors.
+
+```{r}
+sce <- scran::computeSumFactors(sce)
+sizeFactors(sce)
+
+
+```
+
+Use colLabels function to assign labels to cells. E.g. assigned clusters. 
+
+
+## Chapter 5: Framework overview
+
+- Planning
+  - Experimental design
+- Pre-processing
+  - Sample processing, sequencing
+  - Alignment
+  - Quantification
+- Import to R
+  - Construction of single cell Experiment
+- Data processing
+  - Quality Control metrics
+  - Normalization
+  - Feature selection
+  - Integration
+  - Dimensionality reduction
+- Downstream statistical analysis 
+  - Clustering
+  - Differential expression
+  - Trajectory Analysis
+  - Annotation
+- Accessible and reproducible analysis
+  - Interactive Visualization
+  - Reports
+  
+Choice of technology: 
+The sort of standard now is droplet based technology, and UMI based.
+"typical droplet-based experiments would capture anywhere from 10,000 to 100,000 cells, sequenced at anywhere from 1,000 to 10,000 UMIs per cell (usually in inverse proportion to the number of cells)."
+
+Replicates are very encouraged though. 
+
+Pipelines for obtaining a matrix count:
+- CellRanger - 10X custom pipeline based on STAR.
+- Alevin - based on pseudoalignment.
+- scPipe - high multiplex, uses RSubread.
+- scruff - CEL-seq
+
+- DropletUtils can import from 10X data.
+
+The simplest workflow includes:
+- Remove low quality calls
+- Normalize expression values, use a transform like log or vst. 
+- Feature selection, retain highly variable genes. Reduce computation, remove biased genes.
+- Dimensionality reduction. PCA to get a lower rank, followed by e.g. t-SNA for visualization.
+- Cluster cells, assign groups, identify differentially expressed marker genes between clusters.
+
+A quick example:
+```{r}
+library(scRNAseq)
+sce <- MacoskoRetinaData()
+
+# Quality control.
+library(scater)
+is.mito <- grepl("^MT-", rownames(sce))
+qcstats <- perCellQCMetrics(sce, subsets=list(Mito=is.mito))
+filtered <- quickPerCellQC(qcstats, percent_subsets="subsets_Mito_percent")
+sce <- sce[, !filtered$discard]
+
+# Normalization.
+sce <- logNormCounts(sce)
+
+# Feature selection.
+library(scran)
+dec <- modelGeneVar(sce)
+hvg <- getTopHVGs(dec, prop=0.1)
+
+# Dimensionality reduction.
+set.seed(123)
+sce <- runPCA(sce, ncomponents=25, subset_row=hvg)
+sce <- runUMAP(sce, dimred = 'PCA', external_neighbors=TRUE)
+
+# Clustering.
+g <- buildSNNGraph(sce, use.dimred = 'PCA')
+colLabels(sce) <- factor(igraph::cluster_louvain(g)$membership)
+
+# Visualization.
+plotUMAP(sce, colour_by="label")
+
+```
+On this note of getting an overview of the pipeline, this might be useful:
+https://www.sciencedirect.com/science/article/pii/S0888754321000331?via%3Dihub
+
+QC:
+From this I gather, the most useful QC variables are:
+- Number of counts per barcode
+- Number of genes per barcode
+- Proportion of mitochondrial reads
+
+But not sure why these are useful yet.
+
+Normalization:
+For normalization, bulk RNAseq metrics have been adopted.
+DESeq, TMM, CPM, TPM
+
+But there are others, some clustering strategies might even have ad hoc normalization strategies similar to adding offsets to the model in edgeR/DESeq2.
+
+Some packages that might be relevant / sound legit:
+- scNorm
+- scTransform
+
+Maybe check which norm methods are being used by 10x users.
+
+Additional data corrections are in place that deal with:
+- Batch effects
+- Dropouts - "zero inflated" values - because of low sensitivity
+- Biological effects
+
+There are some tools to do imputation of dropouts explicitly, and also some methods take into account dropouts in their models?
+
+Dimentionality reduction:
+
+1. Feature selection
+2. Feature extraction 
+
+Exactly why PCA does not work for scRNAseq if you do feature selection first?
+
+There are a bunch of different downstream applications that can be done:
+cell clustering, cell annotation, trajectory, GRN inference, etc. 
+
+## Chapter 6: Quality Control
+
+Frequent problems with low quality cells:
+- Low quality clusters due to increased mitochondrial or nuclear transcripts because of cell damage.These might cluster together. 
+- PCs would mark differences in quality vs differences in biology.
+- Highly variable genes will be called with respect to differences in quality.
+- In low counts libraries, scaling normalization inflates variance of non zero genes.
+- Scaling for low library size can make some genes appear highly upregulated.
+
+Removing low quality cells
+
+```{r}
+library(scRNAseq)
+sce.416b <- LunSpikeInData(which="416b") 
+sce.416b$block <- factor(sce.416b$block)
+
+```
+
+
+QC metrics
+
+- Library size
+- Expressed features
+- Proportion of spike-ins relative to all
+- Proportion of mitochondrial reads: 
+"The reasoning is that, in the presence of modest damage, the holes in the cell membrane permit efflux of individual transcript molecules but are too small to allow mitochondria to escape, leading to a relative enrichment of mitochondrial transcripts."
+
+Scater package has a function that gets all these metrics:
+```{r}
+location <- rowRanges(sce.416b)
+is.mito <- any(seqnames(location)=="MT")
+library(scater)
+sce.416b <- addPerCellQC(sce.416b, subsets=list(Mito=is.mito))
+colnames(colData(sce.416b))
+
+```
+
+- Library size
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(sum/1e6)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = 1e5/1e6, color = "red")
+```
+
+- Expressed features
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(detected)) +
+  geom_histogram(bins = 50)+
+  geom_vline(xintercept = 5e3, color = "red")
+
+```
+
+- Proportion of spike-ins relative to all
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(altexps_ERCC_percent)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = 10, color = "red")
+
+```
+
+- Proportion of mitochondrial reads: 
+
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(subsets_Mito_percent)) +
+  geom_histogram(bins = 50)+
+  geom_vline(xintercept = 10, color = "red")
+
+
+```
+
+Red lines indicate filters. Use these catch-all filters:
+
+```{r}
+qc.lib <- df$sum < 1e5
+qc.nexprs <- df$detected < 5e3
+qc.spike <- df$altexps_ERCC_percent > 10
+qc.mito <- df$subsets_Mito_percent > 10
+discard <- qc.lib | qc.nexprs | qc.spike | qc.mito
+```
+
+Number of cells removed from each reason
+```{r}
+DataFrame(LibSize=sum(qc.lib), NExprs=sum(qc.nexprs),
+    SpikeProp=sum(qc.spike), MitoProp=sum(qc.mito), Total=sum(discard))
+
+```
+
+Simple strategy works but requires previous knowledge from "experience" to select appropiate thresholds. And these will be different depending on the technology. 
+
+Another way to address filtering is using "adaptive" filters.
+For example, using a measure like Median Absolute Deviation (MAD) to remove outliers from each metric. Using 3 MADs as an outlier definition, will retain 99% f the data if normally distributed. Log transform the data will make it more "normal" I guess.
+
+```{r}
+qc.lib2 <- isOutlier(df$sum, log=TRUE, type="lower")
+qc.nexprs2 <- isOutlier(df$detected, log=TRUE, type="lower")
+qc.spike2 <- isOutlier(df$altexps_ERCC_percent, type="higher")
+qc.mito2 <- isOutlier(df$subsets_Mito_percent, type="higher")
+discard2 <- qc.lib2 | qc.nexprs2 | qc.spike2 | qc.mito2
+DataFrame(LibSize=sum(qc.lib2), NExprs=sum(qc.nexprs2),
+    SpikeProp=sum(qc.spike2), MitoProp=sum(qc.mito2), Total=sum(discard2))
+
+```
+
+quickPerCellQC is a wrapper function for isOutlier with the settings above. 
+
+```{r}
+reasons <- quickPerCellQC(df, 
+    sub.fields=c("subsets_Mito_percent", "altexps_ERCC_percent"))
+colSums(as.matrix(reasons))
+```
+
+Assumptions of this outlier detection metric.
+
+- most cells are acceptable
+- qc metrics indepentent of biology of cells 
+
+Another decision when the experiment involves different batches is to use the outlier detection / removal per batch.
+- Each batch might have different sequencing depth, etc so by batch should be better.
+```{r}
+batch <- paste0(sce.416b$phenotype, "-", sce.416b$block)
+batch.reasons <- quickPerCellQC(df, batch=batch,
+    sub.fields=c("subsets_Mito_percent", "altexps_ERCC_percent"))
+colSums(as.matrix(batch.reasons))
+```
+```{r}
+sce.416b$batch <- batch
+
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(subsets_Mito_percent)) +
+  geom_histogram(bins = 50)+
+  geom_vline(xintercept = 10, color = "red") +
+  facet_grid(rows = vars(batch))
+
+
+```
+- Library size
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(sum/1e6)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = 1e5/1e6, color = "red") +
+  facet_grid(rows = vars(batch))
+```
+
+- Expressed features
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(detected)) +
+  geom_histogram(bins = 50)+
+  geom_vline(xintercept = 5e3, color = "red") +
+  facet_grid(rows = vars(batch))
+
+```
+
+- Proportion of spike-ins relative to all
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(altexps_ERCC_percent)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = 10, color = "red")  +
+  facet_grid(rows = vars(batch))
+
+```
+
+- Proportion of mitochondrial reads: 
+
+```{r}
+colData(sce.416b) %>%
+  as_tibble() %>%
+  ggplot(aes(subsets_Mito_percent)) +
+  geom_histogram(bins = 50)+
+  geom_vline(xintercept = 10, color = "red")  +
+  facet_grid(rows = vars(batch))
+
+
+```
+
+
+- But this assumes that all batches are equally high quality, or that most cells within each batch are high quality.
+- So sometimes it's better to do both and compare? If some batch is really bad then most cells from there should be removed?
+
+
+
+
 
 
