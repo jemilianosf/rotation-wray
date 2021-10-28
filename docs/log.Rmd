@@ -22,5 +22,36 @@ docs/osca_notes.Rmd
 - Found this review that might be useful: https://www.sciencedirect.com/science/article/pii/S0888754321000331?via%3Dihub
 - Apart from that review, went through a couple of chapters of osca.
 
-# 2021-10-19
+# 2021-10-20
 - Going through OSCA. 
+
+# 2021-10-21
+- Get access to cluster / data.
+Got access to HARADAC, but now the dataset is in DCC and I don't have access to that.
+- Look at the cellranger page / tutorial: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/tutorial_ov
+
+# 2021-10-22
+- Osca notes.
+
+# 2021-10-25
+- Install cellranger in HARDAC / go through tutorial. I made a new docs file to add notes on this process: docs/cellranger_notes.Rmd.
+- Useful links:
+  https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/tutorial_ct#runcount
+http://nextgen.mgh.harvard.edu/IlluminaChemistry.html
+
+# 2021-10-26
+- Got access to DCC, and copied fastq files to HARDAC.
+
+# 2021-10-27
+- Run cellranger count
+- Added scripts/run_cellranger_count.sh to use as a slurm execution script for cellranger count.
+
+# 2021-10-28
+- Check outputs and understand reports notes on this can be found in docs/cellranger_notes.
+- Found this paper that compares cellranger to kallisto: https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-021-07930-6.
+"Depending on the origin of the dataset, we suggest to run alternative pipelines side by side and judge on an individual basis."
+One particular reason why this might be the case is that they don't use EM to assign multimappers, which I think could improve read assignment.
+
+- Follow AJ's code to go from counts to UMAP.
+
+
