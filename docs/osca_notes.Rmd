@@ -20,7 +20,7 @@ The SingleCellExperiment class:
 
 Requisite libraries for the tutorial:
 ```{r}
-BiocManager::install(c('SingleCellExperiment','scater', 'scran', 'uwot'))
+#BiocManager::install(c('SingleCellExperiment','scater', 'scran', 'uwot'))
 
 library("SingleCellExperiment")
 library("scater")
@@ -483,7 +483,53 @@ colData(sce.416b) %>%
 - But this assumes that all batches are equally high quality, or that most cells within each batch are high quality.
 - So sometimes it's better to do both and compare? If some batch is really bad then most cells from there should be removed?
 
+An example:
+The Grun et al 2016 human pancreas dataset has two batches that had higher levels of cell destruction, as many cells have a high proportion of spike in reads.
 
+```{r}
+library(scRNAseq)
+sce.grun <- GrunPancreasData()
+sce.grun <- addPerCellQC(sce.grun)
+
+# First attempt with batch-specific thresholds.
+discard.ercc <- isOutlier(sce.grun$altexps_ERCC_percent,
+    type="higher", batch=sce.grun$donor)
+with.blocking <- plotColData(sce.grun, x="donor", y="altexps_ERCC_percent",
+    colour_by=I(discard.ercc))
+
+# Second attempt, sharing information across batches
+# to avoid dramatically different thresholds for unusual batches.
+discard.ercc2 <- isOutlier(sce.grun$altexps_ERCC_percent,
+    type="higher", batch=sce.grun$donor,
+    subset=sce.grun$donor %in% c("D17", "D2", "D7"))
+without.blocking <- plotColData(sce.grun, x="donor", y="altexps_ERCC_percent",
+    colour_by=I(discard.ercc2))
+
+library(patchwork)
+with.blocking | without.blocking
+
+```
+
+Are batches problematic?
+Look at the qc threshold per batches... are there outliers in the qc metrics?
+```{r}
+ercc.thresholds <- attr(discard.ercc, "thresholds")["higher",]
+
+names(ercc.thresholds)[isOutlier(ercc.thresholds, type="higher")]
+
+
+```
+
+Checking the distributions of the QC metrics...
+Are the distributions normal, so the outlier detection works as expected?
+```{r}
+colData(sce.416b) <- cbind(colData(sce.416b), df)
+sce.416b$block <- factor(sce.416b$block)
+sce.416b$phenotype <- ifelse(grepl("induced", sce.416b$phenotype),
+    "induced", "wild type")
+sce.416b$discard <- reasons$discard
+
+```
 
 
 
