@@ -1,0 +1,141 @@
+---
+title: "cellranger_notes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cellranger tutorial notes
+
+
+
+Install cellranger
+```{bash}
+wget -O cellranger-6.1.1.tar.gz "https://cf.10xgenomics.com/releases/cell-exp/cellranger-6.1.1.tar.gz?Expires=1635222550&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vcmVsZWFzZXMvY2VsbC1leHAvY2VsbHJhbmdlci02LjEuMS50YXIuZ3oiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE2MzUyMjI1NTB9fX1dfQ__&Signature=PgPWdm9l7rzn0pph5XDBCYEqiBTrG8kAqXTX1gpGInZDi51YfXCgaVbl8fzHj2JeUZC4EQOiwOsqLxdGBPN621G4MsFrOl8n3AdSwlrNf8utFHrahTBQHIk~ytKJS~ODG00bW8-bA38jWEXdRjbPy0dWSsXzXBzQmUhvcYq-mTsNbHMKRajNhWB71vg4g9eQDov12uCfBH7dIO8H8ffRcKk3HxEB1zPjlbZe7GXICYnERXltsDFTC8C1xsluJtdz4TFowMzQCnXEPH3cmZBlTSr24DLGQrGZ0jEQsjDp5zBNgg-qdArS1X0UmHg~nwFAG97RVH1J86D2JuxZ2m9~~w__&Key-Pair-Id=APKAI7S6A5RYOXBWRPDA"
+
+```
+
+Install bcl2fastq2
+```{bash}
+wget -O bcl2fastq2-v2-20-0-linux-x86-64.zip "https://files.softwaredownloads.illumina.com/e8ed3335-5201-48ff-a2bc-db4bfb792c85/bcl2fastq2-v2-20-0-linux-x86-64.zip?Expires=1635179736&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9maWxlcy5zb2Z0d2FyZWRvd25sb2Fkcy5pbGx1bWluYS5jb20vZThlZDMzMzUtNTIwMS00OGZmLWEyYmMtZGI0YmZiNzkyYzg1L2JjbDJmYXN0cTItdjItMjAtMC1saW51eC14ODYtNjQuemlwIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNjM1MTc5NzM2fX19XX0_&Signature=RcJurStDKUJ6-8D5F2IjMVh-jw5yq-WIw8cw7hu4Eb-~YNMExwAg0osG~eN5risv1x6Er~AL5K2RLAPPVbNInauQxZ6v6GbxnlzGmzFL-BHutrKAaA4TzIJiDt7StR6l2uvVyJeWjThHwgd6ZvVH8i1moJ4W~0nc0thIWSb6Schy7l~4bB8K0wPsQooGIKwJL3CB3uGKJ~4eakoWx~13bnpvIkuaqUvEbPAvEEQH6~8s2nBEgBdgV1GVMwC4B8v5Xtm7Xi-D5~bwjy5gNekgtWA-kVHuU3w9QCoHnXYeuJczD6oV85dJsPwFf8ZQBxaVyC2rhtgfeB~0KLg58Q7qsg__&Key-Pair-Id=APKAJO3UYWPXK4A26FPQ"
+rpm --install --prefix /data/wraycompute/jes157/bin/ bcl2fastq2-v2.20.0.422-Linux-x86_64.rpm
+
+```
+
+Note: could not install bcl2fastq2 directly from illumina site, so I found a conda version for this one.
+
+```{bash}
+
+conda env bcl2fastq2
+```
+
+Running cellranger mkfastq to demultiplex basecalls and obtain fastq files.
+
+```{bash}
+cellranger mkfastq --id=tiny-bcl \
+                     --run=cellranger-tiny-bcl-1.2.0 \
+                     --csv=cellranger-tiny-bcl-simple-1.2.0.csv
+                     
+                     
+```
+
+Note for this, I will need to generate a file with this:
+
+Lane,Sample,Index
+1,test_sample,SI-P03-C9
+
+So I need to know:
+
+Which version of the kit?
+Which lane?
+Which index?
+
+# Running cellranger count
+```{bash}
+cellranger count --id=run_count_1kpbmcs \
+--fastqs=/home/jes157/data_storage/cellranger_count_test/pbmc_1k_v3_fastqs \
+--sample=pbmc_1k_v3 \
+--transcriptome=/home/jes157/data_storage/cellranger_refs/refdata-gex-GRCh38-2020-A
+
+```
+
+What cellranger count actually does:
+
+1. Read trimming
+Trimms either polyA or TSO from Read1 (which should contain mRNA sequence).
+
+2. Splice aware alignment to genome with star
+In addition to mapping the reads to the genome, it assigns each read to whether it is exonic, intronic or intergenic, and if it confidently aligns to the genome.
+
+"A read is exonic if at least 50% of it intersects an exon, intronic if it is non-exonic and intersects an intron, and intergenic otherwise."
+
+
+3. MAPQ adjustment
+
+For reads that align both to exonic and non exonic, exonic alignments are prioritized, and their mapq is adjusted to 255. 
+
+4. Transcriptome Alignment of previously aligned reads  
+
+This is to check if the exonic confidently mapped reads are compatible with annotated transcripts. 
+Will get only those exonics that match orientation and annotated splicing junction, and only of one gene!
+
+To include or not to include intronic reads?
+
+5. UMI counting
+
+First attempts to correct errors in barcode reads. 
+Groups cell barcode, and gene, and checks UMI. If UMI differs by a single base it likely was a sequencing error, so these are collapsed to the UMI with higher support.
+
+Next it groups reads per cell, gene and UMI. 
+Groups with same cell and UMI, but different gene are filtered in two ways:
+1. keep the gene with most support (?)
+2. if tied, drop everything. 
+
+This is the unfiltered feature-barcode matrix.
+
+6. Calling Cell Barcodes
+
+This is the part where the results might be influenced by the selection of expect-cells. 
+
+"Starting with Cell Ranger 6.1, the dynamic range of possible cell loads on the Chromium X Series, including LT and HT kits, is 100 - 60,000 cells, and occasionally the default value of --expect-cells (3,000) might not be adequate for optimal cell calling. This is because --expect-cells is based on detecting barcodes within an order of magnitude of an anchor barcode. Therefore, starting from Cell Ranger 6.1, it is recommended to run all analyses with the --expect-cells option with a reasonable estimate of recovered cells, especially for higher cell load experiments."
+
+
+
+This is not on the description but there is some filtering of the cell and umi barcodes https://ucdavis-bioinformatics-training.github.io/2020-Advanced_Single_Cell_RNA_Seq/data_reduction/scMapping:
+
+Cell barcodes
+Must be on static list of known cell barcode sequences
+May be 1 mismatch away from the list if the mismatch occurs at a low- quality position (the barcode is then corrected).
+UMIs (Unique Molecular Index)
+Must not be a homopolymer, e.g. AAAAAAAAAA
+Must not contain N
+Must not contain bases with base quality < 10
+UMIs that are 1 mismatch away from a higher-count UMI are corrected to that UMI if they share a cell barcode and gene.
+
+
+# Outputs
+HTML reports
+
+barcoded BAM
+- The BAM contains all reads, not just the ones that ended up in the counts matrix. 
+- The other thing is the number-1 added to the cell barcode:
+"This number denotes what we call a GEM well, and is used to virtualize barcodes in order to achieve a higher effective barcode diversity when combining samples generated from separate GEM chip channel runs. Normally, this number will be "1" across all barcodes when analyzing a sample generated from a single GEM chip channel. It can either be left in place and treated as part of a unique barcode identifier, or explicitly parsed out to leave only the barcode sequence itself."
+
+- Has extra tags and fields to indicate the cell barcode, umi, and type of alignment
+- Some records are unmapped reads that correspond to the feature read1, but are these like linked? Yes, I'd think the readname would be similar.
+
+Matrices
+
+They are in a sparse format, similar to cooler:
+
+row_index | column_index | count
+
+And then you get the list of rows and columns as separate tables.
+
+- I'm not sure if we are using the Filtered or the raw. 
+I think the filtered is after cell calling, but I'm not sure if that also happens in seurat after.
+
+
+
