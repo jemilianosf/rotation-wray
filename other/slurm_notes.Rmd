@@ -22,6 +22,9 @@ Login:
 
 ```{bash}
 ssh jes157@hardac-login.genome.duke.edu
+
+ssh jes157@hardac-xfer.genome.duke.edu
+
 ```
 
 foreground jobs: 
@@ -119,4 +122,11 @@ must update R_LIBS_USER to install R modules.
 # Conda environments
 https://genome.duke.edu/sites/genome.duke.edu/files/Using-and-Installing-Custom-Software-on-HARDAC-Conda.pdf
 
+# Installing cellranger
+
+```{bash}
+export PATH=/data/wraycompute/jes157/bin/cellranger-6.1.1:$PATH
+
+
+```
 
