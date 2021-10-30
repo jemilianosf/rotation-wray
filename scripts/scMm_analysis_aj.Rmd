@@ -1,0 +1,302 @@
+---
+title: "Seurat analysis scMm"
+output: html_notebook
+---
+
+
+```{r}
+library(Matrix) # Package to handle large matrices, import the mex format
+library(dplyr) # Data manipulation
+library(Seurat) # scRNAseq tools
+library(tinytex) # 
+library(patchwork) # Multipanel plots 
+library(ggplot2) # Plots
+
+options(Seurat.memsafe = TRUE)
+```
+
+Read in matrices
+```{r eval = FALSE}
+matrix_dir = "../data_raw/scmm_project/G_A1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT1) = barcode.names$V1
+rownames(WT1) = feature.names$V1
+```
+
+```{r eval = FALSE}
+matrix_dir = "../data_raw/scmm_project/G_B1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP1) = barcode.names$V1
+rownames(XP1) = feature.names$V1
+```
+
+```{r eval = FALSE}
+matrix_dir = "../data_raw/scmm_project/G_C2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT2) = barcode.names$V1
+rownames(WT2) = feature.names$V1
+```
+
+```{r eval = FALSE}
+matrix_dir = "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP2) = barcode.names$V1
+rownames(XP2) = feature.names$V1
+```
+
+How to decide the min cells and min features filters ?
+```{r convert-files-to-seurat, eval = FALSE}
+WT1_seurat <- CreateSeuratObject(counts = WT1, project = "WT1", min.cells = 3, min.features = 200)
+WT2_seurat <- CreateSeuratObject(counts = WT2, project = "WT2", min.cells = 3, min.features = 200)
+XP1_seurat <- CreateSeuratObject(counts = XP1, project = "XP1", min.cells = 3, min.features = 200)
+XP2_seurat <- CreateSeuratObject(counts = XP2, project = "XP2", min.cells = 3, min.features = 200)
+
+WT1_seurat$sample <- "WT1"
+WT2_seurat$sample <- "WT2"
+XP1_seurat$sample <- "XP1"
+XP2_seurat$sample <- "XP2"
+
+WT1_seurat$geno <- "WT"
+WT2_seurat$geno <- "WT"
+XP1_seurat$geno <- "XP"
+XP2_seurat$geno <- "XP"
+```
+
+##merging the seurat objects if interested 
+```{r merged-seurat-object, eval = FALSE}
+Mm.merged <- merge(WT1_seurat, y = c(WT2_seurat, XP1_seurat, XP2_seurat), add.cell.ids = c("WT1", "WT2", "XP1", "XP2"), project = "Mm_merged_rep")
+Mm.merged.subset <- merge(WT2_seurat, y = c(XP2_seurat), add.cell.ids = c("WT2", "XP2"), project = "Mm_merged_rep")
+```
+
+```{r eval = FALSE}
+Mm.merged$group <- factor(Mm.merged$sample, levels = c("WT1", "WT2", "XP1", "XP2"))
+Mm.merged.subset$group <- factor(Mm.merged$sample, levels = c("WT2", "XP2"))
+```
+
+Add mitochondrial gene list
+```{r eval = FALSE}
+Mm.merged@misc$mito_gene_list <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+Mm.merged.subset@misc$mito_gene_list <- Mm.merged@misc$mito_gene_list
+
+```
+
+
+```{r eval = FALSE}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged.rds")
+saveRDS(Mm.merged.subset, file = "../data_output/surat_objects/Mm_merged_subset.rds")
+```
+
+###PART 2 
+
+#load from drive
+```{r}
+Mm.merged <- readRDS("../data_output/surat_objects/Mm_merged.rds")
+```
+##put in mito at this point
+```{r}
+Mm.merged[["percent.mt"]] <- PercentageFeatureSet(Mm.merged, features = Mm.merged@misc$mito_gene_list)
+```
+
+# Violin plots of QC features
+```{r}
+VlnPlot(Mm.merged, features = c("nFeature_RNA", "nCount_RNA","percent.mt"), pt.size = 0, ncol = 3)
+```
+
+```{r}
+VlnPlot(Mm.merged, features = c("nFeature_RNA"), pt.size = 1E-100)
+VlnPlot(Mm.merged, features = c("nCount_RNA"), pt.size = 1E-100)
+```
+
+```{r}
+plot1 <- FeatureScatter(Mm.merged, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(Mm.merged, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 | plot2
+```
+
+##Subsetting the data for all samples
+```{r}
+Mm.merged <- subset(Mm.merged, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+VlnPlot(Mm.merged, features = c("nFeature_RNA", "nCount_RNA","percent.mt"), pt.size = 0, ncol = 3)
+```
+
+```{r}
+dim(Mm.merged)
+```
+
+```{r}
+saveRDS(Mm.merged, file = "/Users/ajm108/Desktop/Mm_project/Mm_merged_mito.rds")
+saveRDS(Mm.merged, file = "/Users/ajm108/Desktop/Mm_project/Mm_merged_mito_subset.rds")
+```
+```{r}
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_mito.rds")
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_mito_subset.rds")
+```
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(tidyverse)
+library(Seurat)
+library(sctransform)
+```
+
+Why using this other transform rather than the one in the seurat tutorial?:
+https://satijalab.org/seurat/articles/sctransform_vignette.html
+https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1874-1
+
+But still why 5000?
+```{r}
+Mm.merged.transformed <- SCTransform(Mm.merged, variable.features.n = 5000, vars.to.regress = "percent.mt", verbose = T, conserve.memory = TRUE)
+```
+
+# These are now standard steps in the Seurat workflow for visualization and clustering
+
+##PCA analysis with 200 pcs to test which is best but will try 300
+```{r}
+Mm.merged <- RunPCA(object = Mm.merged.transformed, npcs = 300, features = VariableFeatures(object = Mm.merged.transformed))
+```
+
+```{r}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged_sct_pca.rds")
+```
+```{r}
+Mm.merged <- readRDS("../data_output/surat_objects/Mm_merged_sct_pca.rds")
+```
+
+```{r}
+library("dplyr")
+library("Seurat")
+```
+##Print genes
+```{r}
+print(Mm.merged[["pca"]], dims = 1:5, nfeatures = 5)
+```
+## view important PCAs
+```{r}
+VizDimLoadings(Mm.merged, dims = 105, reduction = "pca")
+```
+##view the PCA
+```{r}
+DimPlot(Mm.merged, reduction = "pca")
+```
+##Heatmap and in multiple dimensions
+```{r}
+DimHeatmap(Mm.merged, dims = 195:200, cells = 2000, balanced = TRUE)
+```
+
+```{r}
+ElbowPlot(Mm.merged, ndims = 300)
+```
+
+##125 is good 24,1.0 has 36 (good option)
+1.5 is 35
+100 PCs good, 1.1 25 clusters
+```{r}
+Mm_neighbor <- FindNeighbors(object = Mm.merged, dims = 1:100)
+Mm_clusters <- FindClusters(object = Mm_neighbor, resolution = 1.1)
+Mm_umap <- RunUMAP(Mm_clusters, dims = 1:100)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+DimPlot(Mm_umap, reduction = "umap", group.by = "group", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+dim(Mm_umap)
+```
+
+```{r}
+saveRDS(Mm_umap, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap.rds")
+```
+```{r}
+Mm_umap <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_umap.rds")
+```
+
+```{r}
+Mm.markers <- FindAllMarkers(Mm_umap, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+Mm.markers %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+```
+
+##genes to plot
+
+```{r}
+write.csv(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_markers.csv")
+saveRDS(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_markers.rds")
+```
+
+```{r}
+ifnb.list <- SplitObject(Mm_umap, split.by = "sample")
+ifnb.list <- lapply(X = ifnb.list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = ifnb.list, nfeatures = 5000)
+ifnb.list <- PrepSCTIntegration(object.list = ifnb.list, anchor.features = features)
+```
+#200 is nice
+```{r}
+immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, normalization.method = "SCT",
+    anchor.features = features)
+immune.combined.sct <- IntegrateData(anchorset = immune.anchors, normalization.method = "SCT")
+immune.combined.sct <- RunPCA(immune.combined.sct, verbose = FALSE, npcs = 300)
+ElbowPlot(immune.combined.sct, ndims = 300)
+immune.combined.sct <- RunUMAP(immune.combined.sct, reduction = "pca", dims = 1:20)
+```
+
+```{r}
+DimPlot(immune.combined.sct, reduction = "umap", group.by = "sample")
+DimPlot(immune.combined.sct, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(immune.combined.sct, reduction = "umap", label = TRUE)
+```
+```{r}
+saveRDS(immune.combined.sct, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated.rds")
+saveRDS(immune.combined.sct, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_subset.rds")
+
+Mm_umap <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated.rds")
+Mm_umap <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_subset.rds")
+```
+
+```{r}
+Mm.markers <- FindAllMarkers(Mm_umap, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+Mm.markers %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+```
+
+##genes to plot
+
+```{r}
+write.csv(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers.csv")
+saveRDS(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers.rds")
+
+write.csv(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers_subset.csv")
+saveRDS(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers_subset.rds")
+```
