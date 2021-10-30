@@ -232,10 +232,29 @@ ElbowPlot(Mm.merged, ndims = 300)
 Mm_neighbor <- FindNeighbors(object = Mm.merged, dims = 1:100)
 Mm_clusters <- FindClusters(object = Mm_neighbor, resolution = 1.1)
 Mm_umap <- RunUMAP(Mm_clusters, dims = 1:100)
+```
+
+```{r}
 DimPlot(Mm_umap, reduction = "umap", label = TRUE)
 DimPlot(Mm_umap, reduction = "umap", group.by = "group", label = TRUE, repel = TRUE)
 DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
 dim(Mm_umap)
+
+```
+
+fzd8
+```{r}
+FeaturePlot(Mm_umap,features = c("ENSMUSG00000036904",
+                                 "ENSMUSG00000026728","ENSMUSG00000027168","ENSMUSG00000022528","ENSMUSG00000048001","ENSMUSG00000020932","ENSMUSG00000024304","ENSMUSG00000004891","ENSMUSG00000074637"))
+```
+
+
+
+
+Radial glia markers from https://www.abcam.com/neuroscience/radial-glia-cell-markers-and-their-major-functions:
+```{r}
+c("Vimentin", "PAX6", "HES1", "HES5", "GFAP", "TN-C", "N-cadherin", "Nestin","SOX2")
+
 ```
 
 ```{r}
