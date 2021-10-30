@@ -1,0 +1,40 @@
+---
+title: "count_matrix_qc"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##
+
+##
+
+Comparison with a similar dataset filtering:
+
+https://www.pnas.org/content/pnas/suppl/2020/07/28/1918883117.DCSupplemental/pnas.1918883117.sapp.pdf:
+The CTL dataset contains two batches sequenced from two separated hemispheres (CTL-1, CTL-2). After
+performance of CellRanger pipeline, the estimated numbers of cells in CTL-1, CTL-2, TAM were 10,255,
+11,511, and 4367, respectively. The CTL-1 and CTL-2 datasets were then merged into the CTL dataset using
+merge function of Seurat R package (version 3.0.1). The raw reads were processed to molecule counts using the
+Cell Ranger pipeline (version 2.1.1, 10x Genomics) with default settings. The raw unique molecular identified
+(UMI) counts from Cell Ranger were processed with the Seurat R toolkit (version 3.0.1). Cells derived from the
+diencephalon were removed. Genes that were detected in less than 0.1% cells were discarded. Low-quality cells
+that had over 5% mitochondrial UMI counts were removed. Additionally, cells that contained under 400 gene
+counts or above 8100 gene counts, in the CTL dataset or cells contained either less than 500 gene counts or
+more than 7,000 gene counts in the TAM dataset were removed. For random subsection, the random number
+was set using set.seed parameter of 3 (R-base-package). The cell number of CTL dataset was then subset to the
+same of cell number of TAM dataset by random sampling of 4,193 cells/condition.
+
+https://journals.biologists.com/dev/article/148/14/dev196022/270963/scRNA-sequencing-uncovers-a-TCF4-dependent
+The reads were de-multiplexed using Cell Ranger (version 2.1.1, 10X Genomics). mkfastq and read quality was assessed by FastQC (version 0.11.8, Babraham Bioinformatics). For mapping the reads to the mm10 genome (10X Reference 2.1.0, GRCm38, Ensembl 84) and to identify single cells, the standard Cell Ranger workflow was used. Common quality control measures for scRNA-Seq (gene count per cell, UMI count per cell, percentage of mitochondrial transcripts) were calculated using the Seurat R package (version 2.3.4) (Butler et al., 2018; Stuart et al., 2019). The analyses were performed for genotypes and for each mouse individually. Quality control thresholds were set to 1000-5000 genes per cells, 1800-10,000 UMIs and <6% of mitochondrial transcripts. Only samples with >500 cells after filtering were used to ensure a complete reproduction of cell diversity in the neocortex. Therefore, two samples for the WT and two samples for the KO were removed. Three samples for WT and two samples for KO were used for further analysis. We had to exclude one WT animal that displayed lower Tcf4 expression than the KO and excluded cells that displayed a high background transcript expression of blood-related genes such as Hbb-a1.
+
+https://journals.sagepub.com/doi/suppl/10.1177/0271678X211026770/suppl_file/sj-pdf-1-jcb-10.1177_0271678X211026770.pdf
+a. Finally, we recovered 58,528 cells with a median UMI count of 2,610 per cell, a mean read
+depth of 92,207 reads per cell, and a median of 1,295 genes per cell. Cellranger aggr pipeline was used to
+combine the data from the sham and MCAO samples for direct comparison and analysis. Seurat is a popular R
+package that can perform QC following criteria as below: 1)cells were sequenced according to the number of
+genes from small to large, and select the top 99%; 2)the gene counts > 200; 3)cells with mitochondrial gene
+expression ratio≤25%
+
