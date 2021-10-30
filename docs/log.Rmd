@@ -52,6 +52,13 @@ http://nextgen.mgh.harvard.edu/IlluminaChemistry.html
 "Depending on the origin of the dataset, we suggest to run alternative pipelines side by side and judge on an individual basis."
 One particular reason why this might be the case is that they don't use EM to assign multimappers, which I think could improve read assignment.
 
-- Follow AJ's code to go from counts to UMAP.
+- Compare output from cellranger to previous run.
 
+# 2021-10-29
+- Follow Alejo's code to go from counts to UMAP.
+scripts/counts_to_umap_alejo_pipeline.R
+
+# 2021-10-30
+- Follow AJ's code to go from counts to UMAP. scripts/scMm_analysis_aj.Rmd.
+The only major thing from this was the proportion of mitochondrial genes in filtering.
 
