@@ -18,7 +18,7 @@ wt1 <- CreateSeuratObject(
   counts=data,
   project="wt1",
   min.cells = 3,
-  min.features = 2000
+  min.features = 500
 )
 
 
@@ -29,7 +29,7 @@ ki1 <- CreateSeuratObject(
   counts=data,
   project="ki1",
   min.cells = 3,
-  min.features= 2000
+  min.features= 500
 )
 
 
@@ -39,7 +39,7 @@ wt2 <- CreateSeuratObject(
   counts=data,
   project="wt2",
   min.cells = 3,
-  min.features=2000
+  min.features=500
 ) 
 
 data <- Read10X("data_raw/run_outs/run_count_G_D2_outs/filtered_feature_bc_matrix", gene.column =1)
@@ -48,7 +48,7 @@ ki2 <- CreateSeuratObject(
   counts=data,
   project="ki2",
   min.cells = 3,
-  min.features=2000
+  min.features=500
 ) 
 
 
@@ -88,38 +88,25 @@ wt_vs_ki <- ScaleData(wt_vs_ki)
 #Perform linear dimensional reduction
 wt_vs_ki <- RunPCA(wt_vs_ki, features = VariableFeatures(object = wt_vs_ki))
 
+saveRDS(wt_vs_ki,"data_output/surat_objects/wt_vs_ki_pca.rds")
+wt_vs_ki <- readRDS("data_output/surat_objects/wt_vs_ki_pca.rds")
 
 # Examine and visualize PCA results a few different ways
-#VizDimLoadings(wt_vs_ki, dims = 1:2, reduction = "pca")
-
-#DimPlot(wt_vs_ki, reduction = "pca")
-
-
-#DimHeatmap(wt_vs_ki, dims = 1, cells = 500, balanced = TRUE)
-
-
-#Determine the ‘dimensionality’ of the dataset
-
-
-wt_vs_ki <- JackStraw(wt_vs_ki,)
-wt_vs_ki <- ScoreJackStraw(wt_vs_ki)
-
-JackStrawPlot(wt_vs_ki, dims = 1:20)
-ElbowPlot(wt_vs_ki,ndims = 50)
-
+ElbowPlot(wt_vs_ki,ndims = 50) +
+  geom_vline(xintercept = 40, color = "red")
+  
 
 #Cluster the cells
 
 
-wt_vs_ki <- FindNeighbors(wt_vs_ki, dims = 1:30)
-wt_vs_ki <- FindClusters(wt_vs_ki, resolution = 0.05)
+wt_vs_ki <- FindNeighbors(wt_vs_ki, dims = 1:40)
+wt_vs_ki <- FindClusters(wt_vs_ki, resolution = 1.1)
 #Run non-linear dimensional reduction (UMAP/tSNE)
 
 # If you haven't installed UMAP, you can do so via reticulate::py_install(packages = 'umap-learn')
 wt_vs_ki <- RunUMAP(wt_vs_ki, dims = 1:30)
 
 DimPlot(wt_vs_ki, reduction = "umap")
-
 DimPlot(wt_vs_ki, reduction = "umap", group.by = "group")
 
 
@@ -128,6 +115,7 @@ DimPlot(wt_vs_ki, reduction = "umap", group.by = "group")
 # ones
 
 wt_vs_ki_markers <- FindAllMarkers(wt_vs_ki, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+saveRDS(wt_vs_ki_markers, file = "data_output/surat_objects/wt_vs_ki_markers.rds")
 
 
 VlnPlot(wt_vs_ki, features = c("ENSMUSG00000036904"))
