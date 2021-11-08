@@ -1,0 +1,222 @@
+---
+title: "scMm_HARE5"
+author: "AJ Massri"
+date: "7/11/2021"
+output:
+  html_document:
+    fig_caption: yes
+    highlight: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, prompt = FALSE, eval = TRUE, 
+                      warning = TRUE, comment=NA, cache = FALSE,
+                      fig.width = 15, fig.height = 8)
+library(dplyr)
+library(Seurat)
+library(tinytex)
+library(patchwork)
+library(ggplot2)
+options(Seurat.memsafe = TRUE)
+
+
+```
+
+```{r}
+Mm.merged <- readRDS("../data_output/surat_objects/Mm_merged_rep.rds")
+
+VlnPlot(Mm.merged, features = c("nFeature_RNA", "nCount_RNA"), pt.size = 1E-12, ncol = 2)
+```
+```{r}
+rm(Mm.merged)
+gc()
+```
+
+```{r}
+Mm_markers <- readRDS("../data_output/surat_objects/Mm_umap_integrated_markers_rep.rds")
+Mm_umap <- readRDS("../data_output/surat_objects/Mm_umap_integrated_rep.rds")
+Mm_umap_subset <- readRDS("../data_output/surat_objects/Mm_umap_integrated_subset_rep.rds")
+Mm_markers_subset <- readRDS("../data_output/surat_objects/Mm_umap_integrated_markers_subset.rds")
+```
+
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+DimPlot(Mm_umap_subset, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap_subset, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap_subset, reduction = "umap", label = TRUE)
+```
+
+
+
+```{r}
+top_markers <- Mm_markers %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC)
+DoHeatmap(Mm_umap, features = top_markers$gene) + NoLegend()
+```
+
+```{r}
+top_markers_subset <- Mm_markers_subset %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC)
+DoHeatmap(Mm_umap_subset, features = top_markers_subset$gene) + NoLegend()
+```
+
+
+
+```{r}
+FeaturePlot(Mm_umap_subset, features = c("ENSMUSG00000027168"))
+```
+```{r}
+FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+
+```
+
+```{r}
+DotPlot(Mm_umap, features = top_markers$gene) + RotatedAxis()
+RidgePlot(Mm_umap, features = top_markers$gene)
+
+```
+
+
+
+
+# UMAP feature exploration
+```{r}
+FeaturePlot(Mm_umap, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+FeaturePlot(Mm_umap, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+Mm_umap$log_nCount_RNA <- log10(Mm_umap$nCount_RNA+1)
+FeaturePlot(Mm_umap, reduction = "umap", features = "log_nCount_RNA") +
+  scale_color_viridis_c()
+
+```
+
+
+```{r}
+Mm_umap_subset$log_nCount_RNA <- log10(Mm_umap_subset$nCount_RNA+1)
+FeaturePlot(Mm_umap_subset, reduction = "umap", features = "log_nCount_RNA") +
+  scale_color_viridis_c()
+```
+
+
+```{r}
+features.path <- "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/features.tsv.gz"
+
+feature.names <- read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+
+Mm_umap@misc$mito_gene_list <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+
+Mm_umap[["percent.mt"]] <- PercentageFeatureSet(Mm_umap, features = Mm_umap@misc$mito_gene_list, assay = "RNA")
+
+Mm_umap_subset@misc$mito_gene_list <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+
+Mm_umap_subset[["percent.mt"]] <- PercentageFeatureSet(Mm_umap_subset, features = Mm_umap_subset@misc$mito_gene_list, assay = "RNA")
+
+
+FeaturePlot(Mm_umap, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+FeaturePlot(Mm_umap_subset, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+```
+
+
+# Overlap of top markers
+```{r}
+library(UpSetR)
+
+
+upset(fromList(list("full"=top_markers$gene,"subset"=top_markers_subset$gene)))
+```
+
+```{r}
+top_markers_10 <- Mm_markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+top_markers_subset_10 <- Mm_markers_subset %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+upset(fromList(list("full"=top_markers_10$gene,"subset"=top_markers_subset_10$gene)))
+
+```
+
+# Overlap of top markers with previous analysis
+```{r}
+markers_aj_subset <- readRDS("../data_raw/scmm_project/Analysis/Mm_umap_integrated_markers_subset.rds")
+Mm_markers_subset_nolimma <- readRDS("../data_output/surat_objects/Mm_umap_integrated_markers_subset_rep.rds")
+
+```
+
+
+
+```{r}
+top_markers_subset_aj_10 <- markers_aj_subset %>% group_by(cluster) %>% top_n(n = 50, wt = avg_logFC)
+
+
+top_markers_subset_nolima_10 <- Mm_markers_subset_nolimma %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+
+upset(fromList(list("previous"=top_markers_subset_aj_10$gene,"new"=top_markers_subset_nolima_10$gene)))
+
+```
+
+```{r}
+
+colnames(markers_aj_subset) <- paste0("prev_",colnames(markers_aj_subset))
+colnames(Mm_markers_subset) <- paste0("new_",colnames(Mm_markers_subset))
+colnames(Mm_markers) <- paste0("newall_",colnames(Mm_markers))
+join_markers <- left_join(markers_aj_subset,Mm_markers_subset, by = c("prev_gene" = "new_gene"))
+join_markers_all <- left_join(markers_aj_subset,Mm_markers, by = c("prev_gene" = "newall_gene"))
+
+```
+
+```{r}
+join_markers %>%
+  ggplot(aes(prev_avg_logFC, new_avg_log2FC)) +
+  geom_point()
+
+join_markers %>%
+  ggplot(aes(prev_p_val_adj, new_p_val_adj)) +
+  geom_point()
+
+join_markers_all %>%
+  ggplot(aes(prev_avg_logFC, newall_avg_log2FC)) +
+  geom_point()
+
+join_markers_all %>%
+  ggplot(aes(prev_p_val_adj, newall_p_val_adj)) +
+  geom_point()
+
+```
+
+```{r}
+VlnPlot(Mm_umap_subset,features = "nFeature_RNA",group.by = "sample")
+```
+
+```{r}
+left_join(Mm_markers_subset, 
+Mm_markers_subset_nolimma,"gene") %>%
+  ggplot(aes(avg_log2FC.x, avg_log2FC.y)) +
+  geom_point()
+
+left_join(markers_aj_subset, 
+Mm_markers_subset_nolimma,"gene") %>%
+  ggplot(aes(avg_logFC, avg_log2FC)) +
+  geom_point()
+
+left_join(markers_aj_subset, 
+Mm_markers_subset,"gene") %>%
+  ggplot(aes(avg_logFC, avg_log2FC)) +
+  geom_point()
+
+```
+
