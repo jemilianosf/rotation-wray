@@ -1,0 +1,131 @@
+---
+title: "umap_alejo_pipeline"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+```
+
+
+```{r}
+wt_vs_ki <- readRDS("../data_output/surat_objects/wt_vs_ki_pca.rds")
+```
+
+# Dims selection
+
+```{r}
+ElbowPlot(wt_vs_ki,ndims = 50) +
+  geom_vline(xintercept = 40, color = "red")
+```
+# Get clusters
+
+Investigating impact of resolution
+
+Low resolution - less clusters
+```{r}
+wt_vs_ki <- FindNeighbors(wt_vs_ki, dims = 1:40)
+
+wt_vs_ki <- FindClusters(wt_vs_ki, resolution = 0.1)
+wt_vs_ki <- RunUMAP(wt_vs_ki, dims = 1:40)
+DimPlot(wt_vs_ki, reduction = "umap")
+DimPlot(wt_vs_ki, reduction = "umap", group.by = "group")
+
+```
+high resolution - more clusters
+```{r}
+wt_vs_ki <- FindClusters(wt_vs_ki, resolution = 2)
+wt_vs_ki <- RunUMAP(wt_vs_ki, dims = 1:40)
+DimPlot(wt_vs_ki, reduction = "umap")
+DimPlot(wt_vs_ki, reduction = "umap", group.by = "group")
+
+```
+Closer to default resolution
+```{r}
+wt_vs_ki <- FindClusters(wt_vs_ki, resolution = 1.1)
+wt_vs_ki <- RunUMAP(wt_vs_ki, dims = 1:40)
+DimPlot(wt_vs_ki, reduction = "umap")
+DimPlot(wt_vs_ki, reduction = "umap", group.by = "group")
+```
+
+Are the clusters influenced by cell expression levels? 
+
+```{r}
+FeaturePlot(wt_vs_ki, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+FeaturePlot(wt_vs_ki, reduction = "umap", features = "nCount_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+features.path <- "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/features.tsv.gz"
+
+feature.names <- read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+
+wt_vs_ki@misc$mito_gene_list <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+
+wt_vs_ki[["percent.mt"]] <- PercentageFeatureSet(wt_vs_ki, features = wt_vs_ki@misc$mito_gene_list)
+
+
+FeaturePlot(wt_vs_ki, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+
+```
+
+Plot markers
+
+FZD8
+```{r}
+
+VlnPlot(wt_vs_ki, features = c("ENSMUSG00000036904"))
+
+FeaturePlot(wt_vs_ki, features = c("ENSMUSG00000036904"),
+            label = T,
+            label.size = 2)
+
+```
+Radial Glia markers
+```{r}
+
+map(c("ENSMUSG00000036904",
+                                 "ENSMUSG00000026728","ENSMUSG00000027168","ENSMUSG00000022528","ENSMUSG00000048001","ENSMUSG00000020932","ENSMUSG00000024304","ENSMUSG00000004891","ENSMUSG00000074637"),FeaturePlot,object = wt_vs_ki)
+
+
+```
+
+Cluster markers
+```{r}
+wt_vs_ki_markers <- readRDS(file = "../data_output/surat_objects/wt_vs_ki_markers.rds")
+
+```
+
+```{r}
+wt_vs_ki_markers %>%
+  ggplot(aes(p_val_adj)) +
+  geom_histogram()
+
+gene_cluster_id <- wt_vs_ki_markers %>% 
+  group_by(cluster) %>% 
+  top_n(1, avg_log2FC) %>%
+  pull("gene")
+
+```
+
+```{r}
+map(gene_cluster_id,FeaturePlot,object = wt_vs_ki)
+```
+
+```{r}
+map(gene_cluster_id,VlnPlot,object = wt_vs_ki)
+```
+
