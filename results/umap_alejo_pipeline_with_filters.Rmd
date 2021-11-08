@@ -1,0 +1,261 @@
+---
+title: "umap_alejo_pipeline_with_filters"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+
+```
+
+Pre-process data
+```{r eval = FALSE}
+data <- Read10X("data_raw/run_outs/run_count_G_A1_outs/filtered_feature_bc_matrix", gene.column =1) # After a lot of work, I realized the gene column is critical to load the file into R
+
+wt1 <- CreateSeuratObject(
+  counts=data,
+  project="wt1",
+  min.cells = 3,
+  min.features = 500
+)
+
+
+
+data <- Read10X("data_raw/run_outs/run_count_G_B1_outs/filtered_feature_bc_matrix", gene.column =1)
+
+ki1 <- CreateSeuratObject(
+  counts=data,
+  project="ki1",
+  min.cells = 3,
+  min.features= 500
+)
+
+
+data <- Read10X("data_raw/run_outs/run_count_G_C2_outs/filtered_feature_bc_matrix", gene.column =1)
+
+wt2 <- CreateSeuratObject(
+  counts=data,
+  project="wt2",
+  min.cells = 3,
+  min.features=500
+) 
+
+data <- Read10X("data_raw/run_outs/run_count_G_D2_outs/filtered_feature_bc_matrix", gene.column =1)
+
+ki2 <- CreateSeuratObject(
+  counts=data,
+  project="ki2",
+  min.cells = 3,
+  min.features=500
+) 
+
+
+# Add groups
+
+wt1$group <- "WT"
+wt2$group <- "WT"
+ki1$group <- "KI"
+ki2$group <- "KI"
+
+
+# Merge
+wt_vs_ki <- merge(wt1, y= c(  wt2,ki1,ki2),
+                            add.cell.ids = c("WT", "WT",
+                                             "KI", "KI"),
+                            project = "wt_vs_ki")
+wt1 <- NULL
+wt2 <- NULL
+ki1 <- NULL
+ki2 <- NULL
+data <- NULL
+gc()
+
+wt_vs_ki$group <- factor(wt_vs_ki$group,  levels = c('WT', 'KI'))
+
+features.path <- "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/features.tsv.gz"
+
+feature.names <- read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+
+wt_vs_ki@misc$mito_gene_list <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+
+wt_vs_ki[["percent.mt"]] <- PercentageFeatureSet(wt_vs_ki, features = wt_vs_ki@misc$mito_gene_list)
+
+saveRDS(wt_vs_ki, "../data_output/surat_objects/wt_vs_ki_raw.rds")
+```
+
+# Filtering
+```{r}
+wt_vs_ki_raw <- readRDS("../data_output/surat_objects/wt_vs_ki_raw.rds")
+```
+
+```{r}
+VlnPlot(wt_vs_ki_raw, features = c("nFeature_RNA", "nCount_RNA","percent.mt"), pt.size = 0, ncol = 3)
+
+```
+
+
+```{r}
+VlnPlot(wt_vs_ki_raw, features = c("nFeature_RNA"), pt.size = 0) +
+  geom_hline(yintercept = 500, col = "red") +
+  geom_hline(yintercept = 7500, col = "red") 
+```
+
+```{r}
+VlnPlot(wt_vs_ki_raw, features = c("nCount_RNA"), pt.size = 0) +
+  geom_hline(yintercept = 50000) 
+
+```
+
+```{r}
+VlnPlot(wt_vs_ki_raw, features = c("percent.mt"), pt.size = 0) +
+  geom_hline(yintercept = 5, color = "red", type = 2) 
+```
+
+Filter and PCA
+```{r eval = FALSE}
+wt_vs_ki_raw <- subset(wt_vs_ki_raw, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+
+#Normalizing the data
+wt_vs_ki_raw <- NormalizeData(wt_vs_ki_raw)
+#Identification of highly variable features (feature selection)
+wt_vs_ki_raw <- FindVariableFeatures(wt_vs_ki_raw, selection.method = "vst", nfeatures = 2000)
+#Scaling the data
+wt_vs_ki_raw <- ScaleData(wt_vs_ki_raw)
+#Perform linear dimensional reduction
+wt_vs_ki_raw <- RunPCA(wt_vs_ki_raw, features = VariableFeatures(object = wt_vs_ki_raw))
+
+
+saveRDS(wt_vs_ki_raw, "../data_output/surat_objects/wt_vs_ki_filt_pca.rds")
+```
+
+```{r}
+rm(wt_vs_ki_raw)
+gc()
+
+```
+
+
+```{r}
+wt_vs_ki_filt_pca <- readRDS("../data_output/surat_objects/wt_vs_ki_filt_pca.rds")
+```
+
+# Dims selection
+
+```{r}
+ElbowPlot(wt_vs_ki_filt_pca,ndims = 50) +
+  geom_vline(xintercept = 40, color = "red")
+```
+# Get clusters
+
+Investigating impact of resolution
+```{r}
+wt_vs_ki_filt_pca <- FindNeighbors(wt_vs_ki_filt_pca, dims = 1:40)
+```
+
+Low resolution - less clusters
+```{r}
+
+wt_vs_ki_filt_pca <- FindClusters(wt_vs_ki_filt_pca, resolution = 0.1)
+wt_vs_ki_filt_pca <- RunUMAP(wt_vs_ki_filt_pca, dims = 1:40)
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap")
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap", group.by = "group")
+
+```
+high resolution - more clusters
+```{r}
+wt_vs_ki_filt_pca <- FindClusters(wt_vs_ki_filt_pca, resolution = 2)
+
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap")
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap", group.by = "group")
+
+```
+Closer to default resolution
+```{r}
+wt_vs_ki_filt_pca <- FindClusters(wt_vs_ki_filt_pca, resolution = 1.1)
+
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap")
+DimPlot(wt_vs_ki_filt_pca, reduction = "umap", group.by = "group")
+```
+
+Are the clusters influenced by cell expression levels? 
+
+```{r}
+FeaturePlot(wt_vs_ki_filt_pca, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+FeaturePlot(wt_vs_ki_filt_pca, reduction = "umap", features = "nCount_RNA") +
+  scale_color_viridis_c()
+```
+
+```{r}
+
+
+FeaturePlot(wt_vs_ki_filt_pca, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+
+```
+
+Plot markers
+
+FZD8
+```{r}
+
+VlnPlot(wt_vs_ki_filt_pca, features = c("ENSMUSG00000036904"))
+
+FeaturePlot(wt_vs_ki_filt_pca, features = c("ENSMUSG00000036904"),
+            label = T,
+            label.size = 2)
+
+```
+Radial Glia markers
+```{r}
+
+map(c("ENSMUSG00000036904",
+                                 "ENSMUSG00000026728","ENSMUSG00000027168","ENSMUSG00000022528","ENSMUSG00000048001","ENSMUSG00000020932","ENSMUSG00000024304","ENSMUSG00000004891","ENSMUSG00000074637"),FeaturePlot,object = wt_vs_ki_filt_pca)
+
+
+```
+
+Cluster markers
+```{r eval = FALSE}
+wt_vs_ki_filt_pca_markers <- FindAllMarkers(wt_vs_ki_filt_pca, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+
+saveRDS(wt_vs_ki_filt_pca_markers,file = "../data_output/surat_objects/wt_vs_ki_filt_pca_markers.rds")
+```
+
+
+```{r}
+wt_vs_ki_filt_pca_markers <- readRDS(file = "../data_output/surat_objects/wt_vs_ki_filt_pca_markers.rds")
+
+```
+
+```{r}
+wt_vs_ki_filt_pca_markers %>%
+  ggplot(aes(p_val_adj)) +
+  geom_histogram()
+
+gene_cluster_id <- wt_vs_ki_filt_pca_markers %>% 
+  group_by(cluster) %>% 
+  top_n(1, avg_log2FC) %>%
+  pull("gene")
+
+```
+
+```{r}
+map(gene_cluster_id,FeaturePlot,object = wt_vs_ki_filt_pca)
+```
+
+```{r}
+map(gene_cluster_id,VlnPlot,object = wt_vs_ki_filt_pca)
+```
