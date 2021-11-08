@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Matrix)
+library(dplyr)
+library(Seurat)
+options(Seurat.memsafe = TRUE)
+
+```
+
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_A1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT1) = barcode.names$V1
+rownames(WT1) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_B1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP1) = barcode.names$V1
+rownames(XP1) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_C2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT2) = barcode.names$V1
+rownames(WT2) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP2) = barcode.names$V1
+rownames(XP2) = feature.names$V1
+```
+
+```{r convert files to seurat}
+WT1_seurat <- CreateSeuratObject(counts = WT1, project = "WT1", min.cells = 3, min.features = 200)
+WT2_seurat <- CreateSeuratObject(counts = WT2, project = "WT2", min.cells = 3, min.features = 200)
+XP1_seurat <- CreateSeuratObject(counts = XP1, project = "XP1", min.cells = 3, min.features = 200)
+XP2_seurat <- CreateSeuratObject(counts = XP2, project = "XP2", min.cells = 3, min.features = 200)
+
+WT1_seurat$sample <- "WT1"
+WT2_seurat$sample <- "WT2"
+XP1_seurat$sample <- "XP1"
+XP2_seurat$sample <- "XP2"
+
+WT1_seurat$geno <- "WT"
+WT2_seurat$geno <- "WT"
+XP1_seurat$geno <- "XP"
+XP2_seurat$geno <- "XP"
+```
+
+##merging the seurat objects if interested 
+```{r merged seurat object}
+Mm.merged <- merge(WT1_seurat, y = c(WT2_seurat, XP1_seurat, XP2_seurat), add.cell.ids = c("WT1", "WT2", "XP1", "XP2"), project = "Mm_merged_rep")
+Mm.merged.subset <- merge(WT2_seurat, y = c(XP2_seurat), add.cell.ids = c("WT2", "XP2"), project = "Mm_merged_rep")
+```
+
+```{r}
+Mm.merged$group <- factor(Mm.merged$sample, levels = c("WT1", "WT2", "XP1", "XP2"))
+Mm.merged.subset$group <- factor(Mm.merged$sample, levels = c("WT2", "XP2"))
+```
+
+###PART 2 
+
+#load from drive
+##put in mito at this point
+```{r}
+Mm.merged[["percent.mt"]] <- PercentageFeatureSet(Mm.merged, pattern = "^MT-")
+Mm.merged.subset[["percent.mt"]] <- PercentageFeatureSet(Mm.merged.subset, pattern = "^MT-")
+
+
+Mm.merged_mito <- Mm.merged
+Mm.merged.subset_mito <- Mm.merged.subset
+
+Mm.merged_mito[["percent.mt"]] <- PercentageFeatureSet(Mm.merged,features = feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")])
+Mm.merged.subset_mito[["percent.mt"]] <- PercentageFeatureSet(Mm.merged.subset,features = feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")])
+
+
+```
+##new merge copy and reordering the columns
+```{r}
+my_levels <- c("WT1","XP1","WT2","XP2")
+Idents(Mm.merged) <- factor(Idents(Mm.merged), levels= my_levels)
+Idents(Mm.merged_mito) <- factor(Idents(Mm.merged_mito), levels= my_levels)
+
+```
+
+
+##Subsetting the data for all samples
+```{r}
+Mm.merged <- subset(Mm.merged, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+Mm.merged_mito <- subset(Mm.merged_mito, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+
+Mm.merged.subset <- subset(Mm.merged.subset, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+Mm.merged.subset_mito <- subset(Mm.merged.subset_mito, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+
+```
+
+```{r}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged_mito.rds")
+saveRDS(Mm.merged.subset, file = "../data_output/surat_objects/Mm_merged_mito_subset.rds")
+saveRDS(Mm.merged_mito, file = "../data_output/surat_objects/Mm_merged_mito_mito.rds")
+saveRDS(Mm.merged.subset_mito, file = "../data_output/surat_objects/Mm_merged_mito_subset_mito.rds")
+
+```
+
