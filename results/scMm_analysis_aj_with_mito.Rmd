@@ -1,0 +1,406 @@
+---
+title: "scMm_analysis_aj_with_mito"
+output: html_document
+---
+
+Follow this code as closely as possible to reproduce the results.
+
+Get these files:
+
+Mm_merged.rds
+
+Mm_umap_integrated.rds
+Mm_umap_integrated_markers.rds
+
+
+Mm_umap_integrated_subset.rds
+Mm_umap_integrated_markers_subset.rds
+
+
+```{r}
+library(Matrix)
+library(dplyr)
+library(Seurat)
+library(tinytex)
+library(patchwork)
+library(ggplot2)
+options(Seurat.memsafe = TRUE)
+getwd()
+```
+
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_A1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT1) = barcode.names$V1
+rownames(WT1) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_B1/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP1 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP1) = barcode.names$V1
+rownames(XP1) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_C2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+WT2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(WT2) = barcode.names$V1
+rownames(WT2) = feature.names$V1
+```
+
+```{r}
+matrix_dir = "../data_raw/scmm_project/G_D2/outs/filtered_feature_bc_matrix/"
+barcode.path <- paste0(matrix_dir, "barcodes.tsv.gz")
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+matrix.path <- paste0(matrix_dir, "matrix.mtx.gz")
+XP2 <- readMM(file = matrix.path)
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+barcode.names = read.delim(barcode.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+colnames(XP2) = barcode.names$V1
+rownames(XP2) = feature.names$V1
+```
+
+```{r convert files to seurat}
+WT1_seurat <- CreateSeuratObject(counts = WT1, project = "WT1", min.cells = 3, min.features = 200)
+WT2_seurat <- CreateSeuratObject(counts = WT2, project = "WT2", min.cells = 3, min.features = 200)
+XP1_seurat <- CreateSeuratObject(counts = XP1, project = "XP1", min.cells = 3, min.features = 200)
+XP2_seurat <- CreateSeuratObject(counts = XP2, project = "XP2", min.cells = 3, min.features = 200)
+
+WT1_seurat$sample <- "WT1"
+WT2_seurat$sample <- "WT2"
+XP1_seurat$sample <- "XP1"
+XP2_seurat$sample <- "XP2"
+
+WT1_seurat$geno <- "WT"
+WT2_seurat$geno <- "WT"
+XP1_seurat$geno <- "XP"
+XP2_seurat$geno <- "XP"
+```
+
+##merging the seurat objects if interested 
+```{r merged seurat object}
+Mm.merged <- merge(WT1_seurat, y = c(WT2_seurat, XP1_seurat, XP2_seurat), add.cell.ids = c("WT1", "WT2", "XP1", "XP2"), project = "Mm_merged_rep")
+Mm.merged.subset <- merge(WT2_seurat, y = c(XP2_seurat), add.cell.ids = c("WT2", "XP2"), project = "Mm_merged_rep")
+```
+
+```{r}
+Mm.merged$group <- factor(Mm.merged$sample, levels = c("WT1", "WT2", "XP1", "XP2"))
+Mm.merged.subset$group <- factor(Mm.merged$sample, levels = c("WT2", "XP2"))
+```
+
+```{r}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged_rep.rds")
+saveRDS(Mm.merged.subset, file = "../data_output/surat_objects/Mm_merged_subset_rep.rds")
+```
+
+###PART 2 
+
+#load from drive
+```{r}
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged.rds")
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_subset.rds")
+```
+##put in mito at this point
+```{r}
+Mm.merged[["percent.mt"]] <- PercentageFeatureSet(Mm.merged, pattern = "^MT-")
+Mm.merged.subset[["percent.mt"]] <- PercentageFeatureSet(Mm.merged.subset, pattern = "^MT-")
+
+```
+##new merge copy and reordering the columns
+```{r}
+Mm.merged.ordered <- Mm.merged
+my_levels <- c("WT1","XP1","WT2","XP2")
+Idents(Mm.merged.ordered) <- factor(Idents(Mm.merged.ordered), levels= my_levels)
+
+
+VlnPlot(Mm.merged.ordered, features = c("nFeature_RNA", "nCount_RNA"), pt.size = 0, ncol = 2)
+```
+
+```{r}
+VlnPlot(Mm.merged.ordered, features = c("nFeature_RNA"), pt.size = 1E-100)
+VlnPlot(Mm.merged.ordered, features = c("nCount_RNA"), pt.size = 1E-100)
+```
+
+```{r}
+plot1 <- FeatureScatter(Mm.merged.ordered, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(Mm.merged.ordered, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+```
+
+##Subsetting the data for all samples
+```{r}
+Mm.merged <- subset(Mm.merged.ordered, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5)
+VlnPlot(Mm.merged, features = c("nFeature_RNA", "nCount_RNA"), pt.size = 0, ncol = 2)
+```
+
+```{r}
+dim(Mm.merged)
+```
+
+```{r}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged_mito_rep.rds")
+saveRDS(Mm.merged.subset, file = "../data_output/surat_objects/Mm_merged_mito_subset_rep.rds")
+```
+```{r}
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_mito.rds")
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_mito_subset.rds")
+```
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(tidyverse)
+library(Seurat)
+library(sctransform)
+```
+
+```{r}
+Mm.merged.transformed <- SCTransform(Mm.merged, variable.features.n = 5000, vars.to.regress = "percent.mt", verbose = FALSE)
+Mm.merged.subset.transformed <- SCTransform(Mm.merged.subset, variable.features.n = 5000, vars.to.regress = "percent.mt", verbose = FALSE)
+
+```
+```{r}
+saveRDS(Mm.merged.transformed, file = "../data_output/surat_objects/Mm_merged_sct_rep.rds")
+saveRDS(Mm.merged.subset.transformed, file = "../data_output/surat_objects/Mm_merged_sct_subset_rep.rds")
+```
+
+```{r}
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_sct.rds")
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_sct_subset.rds")
+
+Mm.merged <- Mm.merged.transformed
+Mm.merged.subset <- Mm.merged.subset.transformed
+```
+
+# These are now standard steps in the Seurat workflow for visualization and clustering
+
+##PCA analysis with 200 pcs to test which is best but will try 300
+```{r}
+Mm.merged <- RunPCA(object = Mm.merged, npcs = 300, features = VariableFeatures(object = Mm.merged))
+Mm.merged.subset <- RunPCA(object = Mm.merged.subset, npcs = 300, features = VariableFeatures(object = Mm.merged.subset))
+
+```
+
+
+
+```{r}
+saveRDS(Mm.merged, file = "../data_output/surat_objects/Mm_merged_sct_pca_rep.rds")
+
+saveRDS(Mm.merged.subset, file = "../data_output/surat_objects/Mm_merged_sct_pca_subset_rep.rds")
+```
+```{r}
+Mm.merged <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_merged_sct_pca.rds")
+Mm.merged <- readRDS("Mm_merged_sct_pca_subset_rep.rds")
+```
+
+```{r}
+library("dplyr")
+library("Seurat")
+```
+##Print genes
+```{r}
+print(Mm.merged[["pca"]], dims = 1:5, nfeatures = 5)
+```
+## view important PCAs
+```{r}
+VizDimLoadings(Mm.merged, dims = 105, reduction = "pca")
+```
+##view the PCA
+```{r}
+DimPlot(Mm.merged, reduction = "pca")
+```
+##Heatmap and in multiple dimensions
+```{r}
+DimHeatmap(Mm.merged, dims = 195:200, cells = 2000, balanced = TRUE)
+```
+
+```{r}
+ElbowPlot(Mm.merged, ndims = 300)
+```
+
+##125 is good 24,1.0 has 36 (good option)
+1.5 is 35
+100 PCs good, 1.1 25 clusters
+```{r}
+Mm_neighbor <- FindNeighbors(object = Mm.merged, dims = 1:100)
+Mm_clusters <- FindClusters(object = Mm_neighbor, resolution = 1.1)
+Mm_umap <- RunUMAP(Mm_clusters, dims = 1:100)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+DimPlot(Mm_umap, reduction = "umap", group.by = "group", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+dim(Mm_umap)
+```
+
+Same but for subset 
+```{r}
+Mm.merged <- FindNeighbors(object = Mm.merged, dims = 1:100)
+Mm.merged <- FindClusters(object = Mm.merged, resolution = 1.1)
+Mm.merged <- RunUMAP(Mm.merged, dims = 1:100)
+saveRDS(Mm.merged, file = "Mm_umap_subset_rep.rds")
+
+```
+
+
+```{r}
+saveRDS(Mm_umap, file = "../data_output/surat_objects/Mm_umap_rep.rds")
+saveRDS(Mm_umap, file = "Mm_umap_subset_rep.rds")
+
+```
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/Mm_umap_rep.rds")
+```
+
+```{r}
+Mm.markers <- FindAllMarkers(Mm_umap, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+Mm.markers %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+```
+
+##genes to plot
+
+```{r}
+write.csv(Mm.markers, file = "../data_output/surat_objects/Mm_umap_markers_rep.csv")
+saveRDS(Mm.markers, file = "../data_output/surat_objects/Mm_umap_markers_rep.rds")
+```
+
+```{r}
+ifnb.list <- SplitObject(Mm_umap, split.by = "sample")
+ifnb.list <- lapply(X = ifnb.list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = ifnb.list, nfeatures = 5000)
+ifnb.list <- PrepSCTIntegration(object.list = ifnb.list, anchor.features = features)
+```
+
+```{r}
+saveRDS(ifnb.list, file = "../data_output/surat_objects/ifnb.list.rds")
+saveRDS(features, file = "../data_output/surat_objects/features.rds")
+
+
+
+```
+
+```{r}
+ifnb.list <- readRDS(file = "../data_output/surat_objects/ifnb.list.rds")
+features <- readRDS(file = "../data_output/surat_objects/features.rds")
+
+```
+
+```{r}
+immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, normalization.method = "SCT",
+    anchor.features = features)
+```
+```{r}
+saveRDS(immune.anchors, file = "../data_output/surat_objects/anchors.rds")
+
+```
+```{r}
+immune.anchors <- readRDS(file = "../data_output/surat_objects/anchors.rds")
+```
+
+
+```{r}
+
+immune.combined.sct <- IntegrateData(anchorset = immune.anchors, normalization.method = "SCT")
+```
+
+```{r}
+saveRDS("combined.sct.rds")
+```
+
+#200 is nice
+```{r}
+
+immune.combined.sct <- RunPCA(immune.combined.sct, verbose = FALSE, npcs = 300)
+ElbowPlot(immune.combined.sct, ndims = 300)
+immune.combined.sct <- RunUMAP(immune.combined.sct, reduction = "pca", dims = 1:20)
+```
+
+```{r}
+DimPlot(immune.combined.sct, reduction = "umap", group.by = "sample")
+DimPlot(immune.combined.sct, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(immune.combined.sct, reduction = "umap", label = TRUE)
+```
+```{r}
+saveRDS(immune.combined.sct, file = "../data_output/surat_objects/Mm_umap_integrated_rep.rds")
+saveRDS(immune.combined.sct, file = "Mm_umap_integrated_rep.rds")
+
+saveRDS(immune.combined.sct, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_subset_rep.rds")
+
+Mm_umap <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated.rds")
+Mm_umap <- readRDS("/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_subset.rds")
+```
+
+```{r}
+Mm.markers <- FindAllMarkers(immune.combined.sct, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+Mm.markers %>% group_by(cluster) %>% top_n(n = 15, wt = avg_logFC)
+```
+
+Integration for subset
+```{r}
+ifnb.list <- SplitObject(Mm.merged, split.by = "sample")
+
+ifnb.list <- lapply(X = ifnb.list, FUN = SCTransform)
+
+features <- SelectIntegrationFeatures(object.list = ifnb.list, nfeatures = 5000)
+
+ifnb.list <- PrepSCTIntegration(object.list = ifnb.list, anchor.features = features)
+
+immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, normalization.method = "SCT",
+    anchor.features = features)
+
+immune.combined.sct <- IntegrateData(anchorset = immune.anchors, normalization.method = "SCT")
+
+immune.combined.sct <- RunPCA(immune.combined.sct, verbose = FALSE, npcs = 300)
+
+immune.combined.sct <- RunUMAP(immune.combined.sct, reduction = "pca", dims = 1:20)
+
+saveRDS(immune.combined.sct, file = "Mm_umap_integrated_subset_rep.rds")
+
+immune.combined.sct <- readRDS("Mm_umap_integrated_subset_rep.rds")
+Mm.markers <- FindAllMarkers(immune.combined.sct, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+saveRDS(Mm.markers, file = "Mm_umap_integrated_markers_subset_rep.rds")
+
+```
+
+
+##genes to plot
+
+```{r}
+write.csv(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers.csv")
+saveRDS(Mm.markers, file = "Mm_umap_integrated_markers_rep.rds")
+
+write.csv(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers_subset.csv")
+saveRDS(Mm.markers, file = "/Users/ajm108/Desktop/Mm_project/Mm_umap_integrated_markers_subset.rds")
+```
