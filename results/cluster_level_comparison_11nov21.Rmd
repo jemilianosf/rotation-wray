@@ -1,0 +1,271 @@
+---
+title: "cluster_level_comparison"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+```
+
+```{r echo = FALSE}
+library(Seurat)
+library(tidyverse)
+library(UpSetR)
+
+options(Seurat.memsafe = TRUE)
+
+```
+
+```{r}
+read_metadata <- function(file) {
+  seurat_obj <- readRDS(file)
+  return(seurat_obj@meta.data)
+}
+
+```
+
+
+```{r}
+
+get_jaccard <- function(set_a, set_b) {
+  jaccardi <- length(intersect(set_a, set_b))/length(union(set_a, set_b))
+  return(jaccardi)
+}
+
+get_cells_from_cluster <- function(seurat_obj_metadata, clust_name){
+  clust_cells <- rownames(seurat_obj_metadata)[seurat_obj_metadata$seurat_clusters == clust_name] 
+  return(clust_cells)
+}
+
+
+```
+
+
+```{r}
+
+get_cluster_jaccard_df <- function(metadata1, metadata2){
+  clust_by_clust_df <- expand.grid(unique(metadata1$seurat_clusters),
+                                   unique(metadata2$seurat_clusters),stringsAsFactors = FALSE)
+  
+  clust_by_clust_df$ji <- apply(clust_by_clust_df,1,function(x,md1,md2){
+    
+    set_a <- get_cells_from_cluster(md1, x[1])
+    set_b <- get_cells_from_cluster(md2, x[2])
+    
+    return(get_jaccard(set_a=set_a,set_b=set_b))
+    
+  },md1 = metadata1, md2 = metadata2)
+  
+  return(clust_by_clust_df)
+}
+
+
+```
+
+
+```{r}
+plot_cluster_jaccard_matrix <- function(clust_by_clust_df){
+  var1_order <- clust_by_clust_df[,c("Var1","ji")] %>%
+    group_by(Var1) %>%
+    summarise(max_ji = max(ji)) %>%
+    arrange(desc(max_ji)) %>%
+    pull(Var1)
+  
+  var2_order <- clust_by_clust_df[,c("Var2","ji")] %>%
+    group_by(Var2) %>%
+    summarise(max_ji = max(ji)) %>%
+    arrange(desc(max_ji)) %>%
+    pull(Var2)
+  
+  clust_by_clust_df %>%
+    mutate(Var1 = ordered(Var1,levels = var1_order),
+           Var2 = ordered(Var2,levels = var2_order)) %>%
+    ggplot(aes(Var1, Var2,fill = ji)) +
+    geom_tile() +
+    scale_fill_viridis_c()
+  
+}
+
+plot_cluster_jaccard_matrix_colorhigh <- function(clust_by_clust_df,cluster_high){
+  var1_order <- clust_by_clust_df[,c("Var1","ji")] %>%
+    group_by(Var1) %>%
+    summarise(max_ji = max(ji)) %>%
+    arrange(desc(max_ji)) %>%
+    pull(Var1)
+  
+  var2_order <- clust_by_clust_df[,c("Var2","ji")] %>%
+    group_by(Var2) %>%
+    summarise(max_ji = max(ji)) %>%
+    arrange(desc(max_ji)) %>%
+    pull(Var2)
+  
+  cluster_high_lgl <- as.factor(var1_order %in% cluster_high)
+  levels(cluster_high_lgl) <- c("black","red")
+  clust_by_clust_df %>%
+    mutate(Var1 = ordered(Var1,levels = var1_order),
+           Var2 = ordered(Var2,levels = var2_order)) %>%
+    ggplot(aes(Var1, Var2,fill = ji)) +
+    geom_tile() +
+    scale_fill_viridis_c() +
+    theme(axis.text.x = element_text(colour = cluster_high_lgl))
+  
+}
+
+```
+
+# Read metadata files
+```{r}
+metadata_downsampled_list_files <- list.files("../data_output/surat_objects/run_11nov21/", pattern = "integrated.rds", full.names = TRUE)
+
+metadata_downsampled_list <- lapply(metadata_downsampled_list_files, read_metadata)
+
+names(metadata_downsampled_list) <- stringr::str_remove(stringr::str_remove(tools::file_path_sans_ext(basename(metadata_downsampled_list_files)),"Mm_merged_mito_"),"_integrated")
+```
+
+# Read marker files
+
+```{r}
+marker_files <- list.files("../data_output/surat_objects/run_11nov21/",pattern = "markers", full.names = TRUE)
+
+
+top_n_markers_from_file <- function(file, n = 20) {
+  markers <- readRDS(file)
+  markers <- markers %>%
+    group_by(cluster) %>% 
+    top_n(n = n, wt = avg_log2FC) %>%
+    pull("gene")
+  return(markers)
+}
+
+markers_list <- lapply(marker_files, top_n_markers_from_file)
+
+names(markers_list) <- str_remove(str_remove(tools::file_path_sans_ext(basename(marker_files)),"Mm_merged_mito_"),"_integrated_markers")
+```
+
+```{r}
+marker_files_previous <- list.files("../data_output/surat_objects/run_8nov21/", full.names = TRUE, pattern = "markers.rds")
+
+markers_list_previous <- lapply(marker_files_previous, top_n_markers_from_file)
+
+names(markers_list_previous) <- str_remove(str_remove(tools::file_path_sans_ext(basename(marker_files_previous)),"Mm_merged_mito_"),"_integrated_markers")
+```
+
+# Read is cluster high  information
+```{r}
+high_cluster_list <- readRDS( "../data_output/surat_objects/high_clusters_list_11nov21.rds")
+
+```
+
+
+# Effect of downscaling 
+
+## All samples
+
+Non mito filtered
+```{r}
+
+plot_cluster_jaccard_matrix_colorhigh(get_cluster_jaccard_df(metadata_downsampled_list$integrated, metadata_downsampled_list$downsample),cluster_high =high_cluster_list$Mm_merged_mito_integrated.rds )
+```
+```{r}
+upset(fromList(markers_list[c("integrated_markers","downsample")]),order.by = "freq")
+
+```
+Mito filtered
+```{r}
+
+plot_cluster_jaccard_matrix_colorhigh(get_cluster_jaccard_df(metadata_downsampled_list$mito, metadata_downsampled_list$mito_downsample),cluster_high =high_cluster_list$Mm_merged_mito_mito_integrated.rds )
+```
+```{r}
+upset(fromList(markers_list[c("mito","mito_downsample")]),order.by = "freq")
+
+```
+
+
+
+## Two samples
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$subset_mito, metadata_downsampled_list$subset_mito_downsample)) 
+
+plot_cluster_jaccard_matrix_colorhigh(get_cluster_jaccard_df(metadata_downsampled_list$subset_mito, metadata_downsampled_list$subset_mito_downsample),cluster_high =high_cluster_list$Mm_merged_mito_subset_mito_integrated.rds )
+
+```
+```{r}
+upset(fromList(markers_list[c("subset_mito","subset_mito_downsample")]),order.by = "freq")
+
+```
+
+
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$subset, metadata_downsampled_list$subset_downsample))
+
+plot_cluster_jaccard_matrix_colorhigh(get_cluster_jaccard_df(metadata_downsampled_list$subset, metadata_downsampled_list$subset_downsample),cluster_high =high_cluster_list$Mm_merged_mito_subset_integrated.rds )
+
+```
+```{r}
+upset(fromList(markers_list[c("subset","subset_downsample")]),order.by = "freq")
+
+```
+# Effect of removing mito
+
+# Two samples
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$subset, metadata_downsampled_list$subset_mito))
+
+```
+```{r}
+upset(fromList(markers_list[c("subset","subset_mito")]),order.by = "freq")
+
+```
+# Effect of removing two samples
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$mito, metadata_downsampled_list$subset_mito))
+
+```
+```{r}
+upset(fromList(markers_list[c("mito","subset_mito")]),order.by = "freq")
+
+```
+# Effect of running the same analsyis twice 
+
+```{r}
+metadata_previous_list_files <- list.files("../data_output/surat_objects/run_8nov21/", pattern = "integrated.rds", full.names = TRUE)
+
+metadata_previous_list <- lapply(metadata_previous_list_files, read_metadata)
+
+names(metadata_previous_list) <- stringr::str_remove(stringr::str_remove(tools::file_path_sans_ext(basename(metadata_previous_list_files)),"Mm_merged_mito_"),"_integrated")
+```
+
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$mito, metadata_previous_list$mito))
+
+```
+
+```{r}
+upset(fromList(list( "mito2" = markers_list$mito,"mito1"= markers_list_previous$mito) ),order.by = "freq")
+
+```
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$subset, metadata_previous_list$subset))
+
+```
+```{r}
+upset(fromList(list( "subset2" = markers_list$subset,"subset1"= markers_list_previous$subset) ),order.by = "freq")
+
+```
+
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$subset_mito, metadata_previous_list$subset_mito))
+
+```
+
+```{r}
+upset(fromList(list( "subset_mito2" = markers_list$subset_mito,"subset_mito1"= markers_list_previous$subset_mito) ),order.by = "freq")
+
+```
+
