@@ -1,0 +1,185 @@
+---
+title: "findconservedmarkers"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+```
+
+
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+```{r eval = FALSE}
+seurat_obj_conserved_markers_list <- lapply(levels(Idents(seurat_obj)), FindConservedMarkers, object = seurat_obj,grouping.var = "geno", verbose = FALSE )
+
+```
+```{r eval = FALSE}
+saveRDS(seurat_obj_conserved_markers_list, "../data_output/surat_objects/integrated_mitoremoved_conserved_markers.rds")
+```
+
+
+
+```{r eval = FALSE}
+names(seurat_obj_conserved_markers_list) <- levels(Idents(seurat_obj))
+
+seurat_obj_conserved_markers_list_df <- do.call(rbind,imap(seurat_obj_conserved_markers_list, function(.x,.y) {
+  .x <- rownames_to_column(.x,var = "ensembl")
+  .x$cluster <- .y
+  return(.x)
+}))
+```
+
+```{r eval = FALSE}
+saveRDS(seurat_obj_conserved_markers_list_df, "../data_output/surat_objects/integrated_mitoremoved_conserved_markers_df.rds")
+
+```
+```{r}
+VlnPlot(seurat_obj,features = "ENSMUSG00000036904", split.by = "sample",pt.size = 0,idents = c("0","1","10","11","9")) 
+```
+```{r}
+FeaturePlot(seurat_obj,features = "ENSMUSG00000036904", split.by = "geno") 
+
+```
+
+
+```{r}
+seurat_obj_conserved_markers_list_df <- readRDS( "../data_output/surat_objects/integrated_mitoremoved_conserved_markers_df.rds")
+
+```
+
+
+```{r}
+top3_markers <- seurat_obj_conserved_markers_list_df %>%
+  filter(XP_pct.1 > 0.5,XP_pct.2 < 0.2) %>%
+  group_by(cluster) %>%
+  top_n(3,XP_avg_log2FC)
+
+
+top10_markers <- seurat_obj_conserved_markers_list_df %>%
+  filter(XP_pct.1 > 0.5,XP_pct.2 < 0.2) %>%
+  group_by(cluster) %>%
+  top_n(10,XP_avg_log2FC)
+
+top30_markers <- seurat_obj_conserved_markers_list_df %>%
+  group_by(cluster) %>%
+  top_n(30,XP_avg_log2FC)
+
+top1_markers <- seurat_obj_conserved_markers_list_df %>%
+  group_by(cluster) %>%
+  filter(XP_pct.1 > 0.5,XP_pct.2 < 0.2) %>%
+  top_n(1,XP_avg_log2FC)
+
+table(top30_markers$cluster)
+```
+```{r}
+sum(seurat_obj_conserved_markers_list_df$cluster %in% as.character(c(5,8,14,18,22)))
+
+seurat_obj_conserved_markers_list_df %>%
+  group_by(cluster) %>%
+  top_n
+table(top_markers$cluster)
+
+?FindConservedMarkers
+
+first_50_rows <- seurat_obj_conserved_markers_list_df %>%
+  group_by(cluster) %>%
+  filter(row_number()%in% 1:50) %>%
+  ungroup()
+```
+
+
+```{r eval = FALSE}
+saveRDS(top3_markers, "../data_output/surat_objects/integrated_mitoremoved_conserved_top3lfc_markers_df.rds")
+write.csv(top3_markers, "../data_output/surat_objects/integrated_mitoremoved_conserved_top3lfc_markers_df.csv")
+
+```
+
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top10_markers$ensembl,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top10_markers <- left_join(top10_markers,symbol_map, by =c("ensembl" = "ENSEMBL"))
+
+```
+
+```{r eval = FALSE}
+write.csv(top10_markers, "../data_output/surat_objects/integrated_mitoremoved_conserved_top10lfc_markers.csv")
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$ensembl,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("ensembl" = "ENSEMBL"))
+
+
+```
+
+```{r eval = FALSE}
+write.csv(top30_markers, "../data_output/surat_objects/integrated_mitoremoved_conserved_top30lfc_markers.csv")
+
+```
+
+```{r}
+sobj_top3 <- seurat_obj[top3_markers$ensembl,]
+
+symbol_map <- bitr(rownames(sobj_top3),fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+rownames(sobj_top3@assays$RNA@data) <- symbol_map[!duplicated(symbol_map$ENSEMBL),]$SYMBOL
+
+DotPlot(sobj_top3, features = symbol_map[!duplicated(symbol_map$ENSEMBL),]$SYMBOL, dot.scale = 8) + RotatedAxis()
+
+
+```
+
+```{r}
+DotPlot(seurat_obj, features = unique(top1_markers$ensembl), dot.scale = 8) + RotatedAxis()
+
+```
+
+
+```{r}
+
+FeaturePlot(seurat_obj,features = top1_markers$ensembl[top1_markers$cluster=="2"] ,label = TRUE,repel = TRUE) 
+```
+
+
+
+
+```{r}
+left_join(bitr(top1_markers$ensembl,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db),top1_markers, by = c("ENSEMBL"="ensembl"))[,c("SYMBOL","cluster")]
+```
+```{r}
+lapply(split(top20_markers,top20_markers$cluster),function(x) {
+  
+
+barplot(enrichGO(bitr(x$ensembl,OrgDb = org.Mm.eg.db,fromType = "ENSEMBL",toType = "ENTREZID")$ENTREZID,OrgDb = org.Mm.eg.db,keyType = "ENTREZID",ont = "BP"))
+} )
+```
+
+
+```{r}
+previous_markers <- readRDS(file = "../data_raw/scmm_project/Analysis/Mm_umap_integrated_markers_subset.rds")
+
+previous_markers[previous_markers$gene == "ENSMUSG00000042453",]
+```
+
