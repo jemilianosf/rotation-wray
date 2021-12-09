@@ -1,0 +1,700 @@
+---
+title: "trying_differential_expression"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(Seurat)
+library(tidyverse)
+library(matrixStats)
+library(patchwork)
+
+options(Seurat.memsafe = TRUE)
+```
+
+# All samples
+
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+
+
+```{r eval = F}
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",label = T)
+
+```
+
+```{r}
+plot_cluster_expdifferences <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, assay = "RNA",verbose = FALSE, group.by = group.by,slot = "counts")$RNA))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+plot_cluster_expdifferences_norm <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+  
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, verbose = FALSE, group.by = group.by, assay = "RNA")$RNA))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+plot_cluster_expdifferences_norm_median <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+  
+    av_clust0_cells <- data.frame("WT"=log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "data",assay = "RNA"))[,clust0_cells@meta.data[,group.by] == "WT"])),
+                                "XP"= log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "data",assay = "RNA"))[,clust0_cells@meta.data[,group.by] == "XP"])))
+  rownames(av_clust0_cells) <- rownames(clust0_cells)
+
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+plot_cluster_expdifferences_sct <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, verbose = FALSE, group.by = group.by, slot = "data" , assay = "SCT")$SCT))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+plot_cluster_expdifferences_sct_median <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+
+      av_clust0_cells <- data.frame("WT"=log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "data",assay = "SCT"))[,clust0_cells@meta.data[,group.by] == "WT"])),
+                                "XP"= log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "data",assay = "SCT"))[,clust0_cells@meta.data[,group.by] == "XP"])))
+  rownames(av_clust0_cells) <- rownames(clust0_cells)
+
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+
+plot_cluster_expdifferences_median <- function( cluster_ident, group.by) {
+  
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+  
+  av_clust0_cells <- data.frame("WT"=log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "counts",assay = "RNA"))[,clust0_cells@meta.data[,group.by] == "WT"])),
+                                "XP"= log1p(rowMedians(as.matrix(GetAssayData(clust0_cells,slot = "counts",assay = "RNA"))[,clust0_cells@meta.data[,group.by] == "XP"])))
+  rownames(av_clust0_cells) <- rownames(clust0_cells)
+  
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    filter(XP > 2 | WT > 2) %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  genes_to_label <- genes_to_label[1:4]
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+
+
+```
+
+
+
+# Scatter plot WT vs XP expression per cluster
+
+```{r}
+
+
+plots_counts_av <- map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences(.x,group.by = "geno") + ggtitle("RNA raw counts average",.x)
+      return(p1)
+    } 
+      )
+
+
+
+plots_norm_av <- map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences_norm(.x,group.by = "geno") + ggtitle("RNA normalized average",.x)
+      return(p1)
+    } 
+      )
+
+
+
+plots_sct_av <- map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences_sct(.x,group.by = "geno") + ggtitle("RNA sct average",.x)
+      return(p1)
+    } 
+      )
+
+
+
+
+```
+
+```{r}
+pwalk(list(plots_counts_av,plots_norm_av,plots_sct_av),function(a,b,c){
+  print(a | b | c)
+})
+```
+
+
+
+```{r eval = FALSE, include = FALSE}
+plots_counts_median <- map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences_median(.x,group.by = "geno") + ggtitle("RNA raw counts median",.x)
+      return(p1)
+    } 
+      )
+
+plots_sct_median <- map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences_sct_median(.x,group.by = "geno") + ggtitle("RNA sct median",.x)
+      return(p1)
+    } 
+      )
+
+plots_norm_median <-  map(levels(Idents(seurat_obj)),
+    function(.x) {
+      p1 <- plot_cluster_expdifferences_norm_median(.x,group.by = "geno") + ggtitle("RNA normalized median",.x)
+      return(p1)
+    } 
+      )
+```
+
+
+# Get positive or negative slopes
+```{r}
+plot_cluster_expdifferences <- function( cluster_ident,seurat_obj, group.by) {
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  DefaultAssay(clust0_cells) <- "RNA"
+
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, verbose = FALSE, group.by = group.by,slot = "counts")$RNA))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  genes_to_label <- av_clust0_cells %>%
+    top_n(4,abs(XP_WT)) %>%
+    pull("gene") 
+  
+  p1 <- ggplot(av_clust0_cells, aes(WT, XP, color = XP_WT)) +
+    geom_abline() +
+    geom_point(size = 0.8) +
+    scale_color_viridis_c() +
+    theme_light()+
+    theme(aspect.ratio = 1) 
+  
+  LabelPoints(plot = p1, points = genes_to_label,color= "black", repel = TRUE,size = 3) 
+  
+}
+get_cluster_diff_slope <- function( cluster_ident, group.by) {
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+  DefaultAssay(clust0_cells) <- "RNA"
+  
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, verbose = FALSE, group.by = group.by,slot = "counts", assay = "RNA")$RNA))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  xp_wt_slope <- lm( XP~WT, av_clust0_cells) %>%
+    broom::tidy() %>%
+    filter(term == "WT") %>%
+    pull("estimate")
+  
+  return(xp_wt_slope)
+}
+
+get_cluster_diff_slope_norm <- function( cluster_ident, group.by) {
+  clust0_cells <- subset(seurat_obj, idents = cluster_ident)
+  
+  DefaultAssay(clust0_cells) <- "RNA"
+  
+  av_clust0_cells <- as.data.frame(log1p(AverageExpression(clust0_cells, verbose = FALSE, group.by = group.by,slot = "data", assay = "RNA")$RNA))
+  
+  av_clust0_cells <- av_clust0_cells %>%
+    mutate(XP_WT = XP - WT,
+           gene = rownames(av_clust0_cells))
+  
+  xp_wt_slope <- lm( XP~WT, av_clust0_cells) %>%
+    broom::tidy() %>%
+    filter(term == "WT") %>%
+    pull("estimate")
+  
+  return(xp_wt_slope)
+}
+
+```
+
+Raw counts
+```{r}
+cluster_slopes <- data.frame("seurat_clusters" = levels(Idents(seurat_obj))) %>%
+  mutate(slopes = map_dbl(seurat_clusters ,get_cluster_diff_slope, group.by = "geno"))
+
+
+cluster_slopes <- cluster_slopes %>%
+  mutate(xp_biased = slopes > 1,
+         xp_biased_top = slopes > 1.1,
+         wt_biased = slopes < 1,
+         wt_biased_top = slopes < 0.9 ) 
+
+cluster_slopes %>%
+  mutate(seurat_clusters = ordered(seurat_clusters, levels = cluster_slopes %>%
+  arrange(desc(slopes)) %>%
+  pull(seurat_clusters) )) %>%
+  ggplot(aes( slopes, seurat_clusters)) +
+  geom_point() +
+  geom_vline(xintercept = 1)
+```
+
+```{r}
+cluster_slopes_norm <- data.frame("seurat_clusters" = levels(Idents(seurat_obj))) %>%
+  mutate(slopes = map_dbl(seurat_clusters ,get_cluster_diff_slope_norm, group.by = "geno"))
+
+
+cluster_slopes_norm <- cluster_slopes_norm %>%
+  mutate(xp_biased = slopes > 1,
+         xp_biased_top = slopes > 1.1,
+         wt_biased = slopes < 1,
+         wt_biased_top = slopes < 0.9 ) 
+
+cluster_slopes_norm %>%
+  mutate(seurat_clusters = ordered(seurat_clusters, levels = cluster_slopes_norm %>%
+  arrange(desc(slopes)) %>%
+  pull(seurat_clusters) )) %>%
+  ggplot(aes( slopes, seurat_clusters)) +
+  geom_point() +
+  geom_vline(xintercept = 1)
+```
+
+
+```{r echo = FALSE}
+seurat_obj$xp_biased_clust <- seurat_obj$seurat_clusters %in% cluster_slopes$seurat_clusters[cluster_slopes$xp_biased]
+seurat_obj$xp_biased_clust_top <- seurat_obj$seurat_clusters %in% cluster_slopes$seurat_clusters[cluster_slopes$xp_biased_top]
+
+seurat_obj$wt_biased_clust <- seurat_obj$seurat_clusters %in% cluster_slopes$seurat_clusters[cluster_slopes$wt_biased]
+seurat_obj$wt_biased_clust_top <- seurat_obj$seurat_clusters %in% cluster_slopes$seurat_clusters[cluster_slopes$wt_biased_top]
+
+seurat_obj$xp_biased_clust_norm <- seurat_obj$seurat_clusters %in% cluster_slopes_norm$seurat_clusters[cluster_slopes_norm$xp_biased]
+seurat_obj$wt_biased_clust_norm <- seurat_obj$seurat_clusters %in% cluster_slopes_norm$seurat_clusters[cluster_slopes_norm$wt_biased]
+
+
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",group.by = "xp_biased_clust",label = T)
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",group.by = "xp_biased_clust_top",label = T)
+
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",group.by = "wt_biased_clust",label = T)
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",group.by = "wt_biased_clust_top",label = T)
+
+```
+# N cells per cluster
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  geno,)) +
+  geom_bar(position = "dodge") 
+```
+
+```{r}
+
+
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  sample,)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  geno)) +
+  geom_bar(position = "dodge") +
+  facet_grid(rows = vars(xp_biased_clust))
+```
+
+
+
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div") +
+  facet_grid(rows = vars(xp_biased_clust))
+
+```
+
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  geno)) +
+  geom_bar(position = "dodge") +
+  facet_grid(rows = vars(xp_biased_clust_top))
+
+```
+
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  sample,)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div") +
+  facet_grid(rows = vars(xp_biased_clust_top))
+```
+
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  geno)) +
+  geom_bar(position = "dodge") +
+  facet_grid(rows = vars(wt_biased_clust_top))
+
+```
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div") +
+  facet_grid(rows = vars(wt_biased_clust_top)) 
+```
+
+
+Norm 
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  geno)) +
+  geom_bar(position = "dodge") +
+  facet_grid(rows = vars(xp_biased_clust_norm))
+```
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) )) %>%
+  ggplot(aes(seurat_clusters, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div") +
+  facet_grid(rows = vars(xp_biased_clust_norm))
+
+```
+
+# Differential expression with FindMarkers
+```{r eval = FALSE}
+get_diff_expressed_genes <- function(cluster_name, test.use = "wilcox") {
+  Idents(seurat_obj) <- "cluster.geno"
+  cluster0_de_markers <- FindMarkers(seurat_obj, ident.1 = paste0(cluster_name,"_WT"), ident.2 = paste0(cluster_name,"_XP"), verbose = FALSE, slot = "counts", assay ="RNA",test.use = test.use)
+  vplot <- cluster0_de_markers %>%
+    ggplot(aes(avg_log2FC, - 10*log(p_val_adj), color =  p_val_adj < 0.01 & abs(avg_log2FC) > 0.5 )) +
+    geom_point() 
+  
+  diff_genes_df <- cluster0_de_markers[cluster0_de_markers$p_val_adj < 0.01 & abs(cluster0_de_markers$avg_log2FC) > 0.5,]
+  return(list("volcano_plot" = vplot,"diff_genes_df" = diff_genes_df ))
+  
+}
+
+```
+
+```{r eval = FALSE}
+seurat_obj$cluster.geno <- paste(Idents(seurat_obj), seurat_obj$geno, sep = "_")
+Idents(seurat_obj) <- "seurat_clusters"
+
+de_wt_xp_nbinom <- map(levels(Idents(seurat_obj)),get_diff_expressed_genes, seurat_obj = seurat_obj, test.use = "negbinom")
+names(de_wt_xp_nbinom) <- levels(Idents(seurat_obj))
+
+de_wt_xp_wilcox <- map(levels(Idents(seurat_obj)),get_diff_expressed_genes, seurat_obj = seurat_obj, test.use = "wilcox")
+names(de_wt_xp_wilcox) <- levels(Idents(seurat_obj))
+
+```
+
+Compare wilcox and negbinom
+
+
+```{r eval = FALSE}
+diff_genes_nbinom <- map(de_wt_xp_nbinom,"diff_genes_df") %>%
+  map(~rownames(.x))
+diff_genes_wilcox <- map(de_wt_xp_wilcox,"diff_genes_df") %>%
+  map(~rownames(.x))
+
+map2(diff_genes_nbinom, diff_genes_wilcox,~ length(intersect(.x,.y))/length(union(.x,.y)))
+```
+
+
+
+
+
+```{r eval = FALSE}
+clust0_wt_genes <- rownames(de_wt_xp_nbinom$`0`$diff_genes_df)
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000094777"), split.by = "geno")
+
+Idents(seurat_obj) <- "seurat_clusters"
+VlnPlot(seurat_obj, features = c("ENSMUSG00000094777"), split.by = "geno", combine = FALSE,pt.size = 0)
+VlnPlot(seurat_obj, features = c("ENSMUSG00000094777"), split.by = "sample", combine = FALSE,pt.size = 0)
+
+```
+
+
+```{r eval = FALSE}
+clust1_wt_genes <- rownames(de_wt_xp_nbinom$`1`$diff_genes_df)
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000090137"), split.by = "geno")
+
+Idents(seurat_obj) <- "seurat_clusters"
+VlnPlot(seurat_obj, features = c("ENSMUSG00000090137"), split.by = "geno", combine = FALSE,pt.size = 0)
+VlnPlot(seurat_obj, features = c("ENSMUSG00000090137"), split.by = "sample", combine = FALSE,pt.size = 0)
+
+```
+
+
+```{r eval = FALSE}
+clust7_wt_genes <- rownames(de_wt_xp_nbinom$`7`$diff_genes_df)
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000050708"), split.by = "geno")
+
+de_wt_xp_nbinom$`7`$volcano_plot
+
+de_wt_xp_nbinom$`12`$volcano_plot
+
+de_wt_xp_nbinom$`23`$volcano_plot
+
+```
+
+```{r}
+
+```
+
+
+```{r eval = FALSE}
+library(clusterProfiler)
+library("org.Mm.eg.db")
+bitr(clust0_wt_genes,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+```
+
+# Interesting DE in cluster 18
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000061808"), split.by = "geno")
+
+Idents(seurat_obj) <- "seurat_clusters"
+VlnPlot(seurat_obj, features = c("ENSMUSG00000061808"), split.by = "geno", combine = FALSE,pt.size = 0)
+VlnPlot(seurat_obj, features = c("ENSMUSG00000061808"), split.by = "sample", combine = FALSE,pt.size = 0)
+
+```
+
+```{r eval = FALSE}
+DimPlot(seurat_obj, reduction = "umap", split.by = "geno",label = T)
+
+```
+
+
+## Previous attempt
+# High difference in cluster 1 likely due to single outlier cells
+
+```{r eval = FALSE}
+plot_cluster_expdifferences("1", seurat_obj = seurat_obj,group.by = "geno")
+
+```
+
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000019874"), split.by = "geno")
+
+```
+```{r eval = FALSE}
+VlnPlot(seurat_obj, features = c("ENSMUSG00000019874"), split.by = "geno", combine = FALSE)
+```
+
+# Cluster 20
+
+```{r eval = FALSE}
+plot_cluster_expdifferences("20", seurat_obj = seurat_obj,group.by = "geno")
+
+```
+
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000052187"), split.by = "geno")
+
+```
+```{r eval = FALSE}
+VlnPlot(seurat_obj, features = c("ENSMUSG00000052187"), split.by = "geno", combine = FALSE)
+```
+
+# Cluster 25
+
+```{r eval = FALSE}
+plot_cluster_expdifferences("25", seurat_obj = seurat_obj,group.by = "geno")
+
+```
+
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000069917"), split.by = "geno")
+
+```
+```{r eval = FALSE}
+VlnPlot(seurat_obj, features = c("ENSMUSG00000069917"), split.by = "geno", combine = FALSE)
+```
+
+
+# FZD8
+
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000036904"), split.by = "geno")
+
+```
+
+```{r eval = FALSE}
+
+
+VlnPlot(seurat_obj, features = c("ENSMUSG00000036904"), split.by = "geno", combine = FALSE)
+```
+
+
+"ENSMUSG00000019874"
+
+```{r eval = FALSE}
+FeaturePlot(seurat_obj, features = c("ENSMUSG00000019874"), split.by = "geno")
+
+```
+
+```{r eval = FALSE}
+
+
+VlnPlot(seurat_obj, features = c("ENSMUSG00000019874"), split.by = "geno", combine = FALSE)
+```
+
+
+
+
+
+# Find conserved markers 
+```{r eval = FALSE}
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj_conserved_markers <- FindConservedMarkers(seurat_obj, ident.1 = 0, grouping.var = "geno", verbose = FALSE)
+head(seurat_obj_conserved_markers)
+
+```
+
+
