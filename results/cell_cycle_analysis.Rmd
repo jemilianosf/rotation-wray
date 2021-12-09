@@ -1,0 +1,172 @@
+---
+title: "cell_cycle_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(scater)
+library(scran)
+library(edgeR)
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+
+```
+
+## Cell cycle analysis 
+
+Here I follow the chapter from: http://bioconductor.org/books/3.14/OSCA.advanced/cell-cycle-assignment.html
+
+## Aim
+
+Cell cycle analysis is assigning a cell cycle phase (G1, S, G2, etc) to each cell. This information has been used as a nuissance factor with the assumption that differences in cell cycle stage between cells of the same cell type are not interesting, and can drive unwanted cluster separation. 
+
+In addition, in this case we are most interested in whether there are changes in cell cycle stages between experimental conditions.
+
+## Approach
+
+Using the cyclone classifier:
+- Uses a reference dataset, precomputed for mouse. 
+- This dataset has cells in different cell cycle stages, finds DE genes between cell cycle stages, chooses these as markers. 
+- Then, the sign of the markers in the test dataset are used to assign cells to stages.
+
+## Prepare data 
+```{r}
+sce_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+DefaultAssay(sce_obj) <- "RNA"
+
+
+sce_obj <- SingleCellExperiment(assays = list(counts = sce_obj@assays$RNA@counts), 
+                           colData = DataFrame(sce_obj@meta.data))
+
+
+```
+
+## Run cyclone
+```{r eval = FALSE}
+set.seed(100)
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(sce_obj, mm.pairs, gene.names=rownames(sce_obj))
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments.rds")
+```
+## Explore cell cycle scores in clusters
+```{r}
+assignments <- readRDS("../data_output/osca_objects/cellcycle_assignments.rds")
+sce_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+```
+```{r}
+sce_obj$G1 <- assignments$normalized.scores$G1
+sce_obj$S <- assignments$normalized.scores$S
+sce_obj$G2M <- assignments$normalized.scores$G2M
+sce_obj$phases <- assignments$phases
+```
+
+```{r}
+FeaturePlot(sce_obj,features = "G1")
+```
+
+```{r}
+FeaturePlot(sce_obj,features = "G2M")
+```
+
+```{r}
+FeaturePlot(sce_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(sce_obj,group.by  = "phases")
+
+```
+
+```{r}
+cells_by_cycle <- table(sce_obj$phases,sce_obj$sample)
+```
+
+```{r}
+(cells_by_cycle[2,]/cells_by_cycle[1,]) %>%
+  enframe() %>%
+  ggplot(aes(name,value)) +
+  geom_col()+
+  theme(aspect.ratio = 1) +
+  ylab("G2-M / G1") +
+  xlab(NULL)
+
+(cells_by_cycle[3,]/cells_by_cycle[1,]) %>%
+  enframe() %>%
+  ggplot(aes(name,value)) +
+  geom_col() +
+  theme(aspect.ratio = 1)
+
+```
+By cluster
+```{r}
+counts_per_cluster <- table(sce_obj$phases,paste(sce_obj$seurat_clusters, sce_obj$sample))
+g2_g1_percluster<- counts_per_cluster["G2M",] / counts_per_cluster["G1",]
+
+```
+
+```{r}
+g2_g1_percluster_df <- g2_g1_percluster %>%
+  enframe(name = "sample_cluster",value = "g2m/g1") %>%
+  mutate(cluster = str_split(sample_cluster, " ") %>% map_chr(1),
+         sample = str_split(sample_cluster, " ") %>% map_chr(2))
+  
+  
+```
+```{r}
+g2_g1_percluster_df %>%
+  ggplot(aes(sample, `g2m/g1`)) +
+  geom_col() +
+  facet_wrap(vars(cluster))
+```
+
+# Check cyclin genes
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+gene_names <- bitr(rownames(sce_obj),fromType = "ENSEMBL",toType = "SYMBOL", OrgDb = org.Mm.eg.db)
+
+cyclin_genes <- gene_names[grepl("^Ccn[abde][0-9]$", gene_names$SYMBOL),]
+
+cyclin_genes
+```
+G2 markers
+
+Ccnb1
+```{r}
+FeaturePlot(sce_obj,features = "ENSMUSG00000041431")
+
+```
+Ccna2 (Also S)
+```{r}
+FeaturePlot(sce_obj,features = "ENSMUSG00000027715")
+
+```
+
+G1 markers
+
+Cyclin D
+```{r}
+FeaturePlot(sce_obj,features = "ENSMUSG00000000184")
+
+```
+Cyclin E
+
+G1/S
+```{r}
+FeaturePlot(sce_obj,features = "ENSMUSG00000028212")
+
+```
+
+
