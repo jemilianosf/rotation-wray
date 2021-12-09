@@ -62,3 +62,290 @@ scripts/counts_to_umap_alejo_pipeline.R
 - Follow AJ's code to go from counts to UMAP. scripts/scMm_analysis_aj.Rmd.
 The only major thing from this was the proportion of mitochondrial genes in filtering.
 
+# 2021-11-01
+- After going through AJ's code, I decided to run everything as closely as possible  to get the exact same results as previously.
+- Then, I'm going to run the modified code with changes (like filtering cells by the proportion of mt reads.) I have two plots in mind to plot side by side:
+  - UMAP colored by RNA content.
+  - UMAP with mito filtering.
+- Finally I'm going to try the differential expression pipeline after integration.
+
+The main questions I have are:
+- There seem to be two types of cells: low counts / high counts. How do we know if these are dropouts? Do we expect this difference in distribution of counts for actual populations of cells in this biological sample? In cellranger's cell calling step they say the point of doing the cell calling step is to get those low count cell types that do not look like dropouts. But the cutoff in each sample is slightly different for these, with exp1 including more of these, and exp2 including less. I worry that we are either including more dropouts in exp1 than exp2, or we are missing some low count cells in exp2 in this step. 
+ 
+# 2021-11-02
+# 2021-11-03
+These two days I was just trying to run the Seurat integration part from AJs script. But there is a part where it just kills the Rsession so I am trying that on the cluster.
+
+# 2021-11-04
+
+So I am trying to get the goals set up on monday:
+- Run everything
+- UMAP colored by RNA content
+- Run everything with the different mt filtering
+
+# 2021-11-05
+- Lab meeting
+- Meeting with AJ and Greg, suggestions:
+  - Get in touch with Yin to get marker genes to look out for.
+  - Subset clusters with higher counts.
+  - Next steps would be try out the integration pipeline for differential expression between conditions (?), and cell cycle.
+
+- I was exploring the dataset again and It looks like the new run was not exactly the same as the last one, so I am just gonna re-do that part to make sure and if something is happening maybe I'll ask AJ again. Maybe the version (?).
+- To rule out the weird differences at the level of markers, I'm running markers without limma for the subset.
+
+Either way, the next steps are:
+a) Streamline the integration pipeline, include filtering for mt genes.
+b) Include some metrics for clusters, as suggested in that paper that bashes umap(?), maybe try to do automatic selection of clusters.
+c) Get to the differential expression / Cell cycle parts
+
+# 2021-11-08
+- Week aims:
+  - Monday, repeat previous analysis to see if there are any inconsistencies. Also do the downsampling experiment. 
+  - Tuesday, do the integration / differential expression analysis.
+  - Thursday, look at the results and prepare presentation.
+  
+1. Repeat previous analysis to see if there are any inconsistencies.
+- Create a script from the Rmarkdown, one where it's easy to change parameters.
+- Run script with previous parameters.
+
+Added scripts/scmm_analysis.R that runs AJs pipeline automatically. Takes as input the merged seurat object with mito information.
+
+Added run_scmm_analysis.sh which is a wrapper for scmm_analysis.R for slurm.
+
+Added get_mito_objects.R got the seurat object with mito information (ran locally).
+
+- Try parameters on the Rmarkdown.
+- Try downsample parameters.
+
+2. Downsampling cells to see if we can get consistent clusters even without the difference.
+3. Streamline the integration pipeline, include filtering for mt genes.
+
+# 2021-11-09
+- Check results from previous run: results/check_new_runs_8nov21.Rmd.
+So the results are very similar to my first run, so still not the same as AJ's run.
+Even comparing my first two runs there are large differences between markers (?). 
+
+- Finish downsampling.
+- Do "final" integration / DE. 
+
+# 2021-11-10
+Managed to get the downsampling objects. Run the umap pipeline on these.
+This is in the scripts/get_downsample_object.Rmd.
+
+For tomorrow:
+- Finish the whole downsampling analysis including comparing clusters with jaccard index.
+- Try integration / DE pipeline (note from yesterday's attempt that find conserved markers takes time).
+
+# 2021-11-11
+
+Steps for today:
+- Check results from downsampling / new run.
+- Do cluster comparison with jaccard index between downsample and not downsample.
+- Read about cell types.
+The subsampling umap results are in results/check_new_runs_11nov21.rmd, and the cluster comparison between cluster calls are in results/cluster_level_comparison_11nov21.rmd.
+
+# 2021-11-12
+- Obtain differentially expressed markers between conditions.
+- Meeting with Greg: agree that differentially expressed genes between conditions might be useful. Noted the differences in slope between comparisons. Also asked if there are differences in cell numbers between experimental conditions.
+
+# 2021-11-15
+
+- Differences in intra-cluster cell numbers between conditions.
+- Use median expression instead of average expression to remove influence of outliers
+- Note clusters that have changes in slope.
+
+These are all in results/differential_expression_analysis.
+
+# 2021-11-16
+- Continue DE analysis:
+- Re-do the median expression to do median expression per cluster - this was not necessary as the median was already calculated intra cluster, which leaves the question of why the average RNA does not show the high variance for low counts characteristic of the log transform?
+- Re-do selection of slope > 1
+From this step it is clear that slopes < 1 are associated with clusters containing almost entirely cells from batch 1 -> remove these clusters.
+This also true for cluster 23  slope > 1.1, but clusters 7 and 12, both with slope > 1.1 seem to be consistent between replicates, these have higher WT than XP cells ->So investigate these clusters further.
+
+The other slightly higher than 1 slopes I am still not sure why they would be.
+
+- Plot FindMarkers DE results wilcox vs negbinom
+From these, I just plotted the negbinom but I saw that even for those that look very "differential" there is no consistency across replicates, which I feel justifies the need for pseudobulk approach.
+
+- Are these effects due to using raw counts? Try NormalizeData instead, and re-do the slope calculations - this is left to do maybe I can try this tomorrow morning.
+
+For later:
+- Try to find the most appropiate way to do comparisons between conditions:
+  - Found this Nature Plants paper of single cell root with cytokinin vs WT https://www.nature.com/articles/s41477-021-01017-6#Sec6 they use the standard Seurat pipleline with wilcox test, and don't have replicates.
+  
+- Also try the pseudobulk approach: http://bioconductor.org/books/3.14/OSCA.multisample/multi-sample-comparisons.html
+
+# 2021-11-17
+- Added the normalized (library size) counts version of the de analysis.
+
+# 2021-11-19
+- Finish exploring the normalized version.
+
+# 2021-11-21
+- Do pseudobulk DE approach.
+- Tutorial is in results/de_pseudoulk.Rmd
+- Analysis is in results/de_peudobulk_analysis.Rmd
+- Seems to be working. A gene of interest might be Zic4. 
+
+# 2021-11-22
+- Try the differential abundance analysis.
+  - Tutorial in results/diff_abundance.Rmd
+  - Analysis in results/diff_abundance_analysis.Rmd
+From this I can see that it's likely that no clusters show differential abundance.
+But two clusters seem to have consistent differential abundance:
+More abundant in XP - cluster 9
+More abundant in WT - cluster 12
+
+After this I thought that I can also use this analysis to remove or flag clusters that are overwhelmingly only present in one batch.
+
+- Work more on the differential expression pseudobulk.
+
+- Put all DE analyses together. 
+
+
+- At some point we also might want to do the cell cycle analysis thing.
+- Another thing could be trajectories.
+- Another thing for final week might be reproducible analysis interactive.
+
+# 2021-11-23
+- Run FindIntegratedMarkers for each cluster.
+The results from this are in results/find_conserved_markers.Rmd
+
+- I just thought it might be useful to do a pathway level analysis: https://bioconductor.org/packages/release/bioc/vignettes/ReactomeGSA/inst/doc/analysing-scRNAseq.html
+
+- Some notes after meeting with Greg:
+- Check stress signals per cluster.. esp for the weird low abundance clusters.
+- Add gene names to plots.
+- Add more info to plots of differential genes... so check distribution of values per cell.
+- Did the pseudobulk, not by cluster but by replicate, and did not get any DE genes.
+
+# 2021-11-24
+
+- Try the cell cycle analysis
+  - Tutorial in results/cell_cycle_tutorial.Rmd
+  - Analysis in results/cell_cycle_analysis.Rmd
+  
+It looks like there are more cycling cells in the XP datasets.
+
+# 2021-11-29
+- Prepare meeting 
+1. As is plots:
+- Cell clusters UMAP
+
+- Cell number per cluster plots
+- Cell cycle umap
+2. Put gene names on plots
+- markers dot plot
+- MA plots
+- Violin DE plots 
+
+3. Print data.frames of integrated markers, and of DE genes
+
+To do list after meeting:
+
+Meeting:
+- Do abundance / diff expression on only batch 2
+- Check for WNT pathway genes expression / enrichment
+- Cluster by Tbr2 positive cells
+- Check genes per GO category in the DE genes
+
+Other:
+- Look how to check for cell damage / death / markers 
+
+Cell cycle:
+- Read more on cyclone
+- cyclin feature plots
+
+# 2021-11-30
+- Do feature plots of Tbr2 and of previous markers.
+- Look how to check for cell damage / death / markers 
+In results/qc_of_batch1_clusters.Rmd I looked at the markers (not intergrated) of clusters that come mostly from batch1.
+
+Did results/extreme_pseudobulk_bacth.Rmd analysis where I did a pseudobulk approach to detect DEGs by batch. The biased genes are not clearly a stress response.
+
+Since there is not something clear from these lists, I thought of three things I could do:
+- Do cells fall on the same clusters if using two vs four replicates?
+- Do a more systematic plot of all known stress response genes and compare batch1 vs batch2.
+- Keep looking for ways people deal with this / re-do the cell calling more carefully?
+
+# 2021-12-1
+- Do cells fall on the same clusters if using two vs four replicates? Added this to results/qc_of_batch1_clusters.Rmd. 
+Also found that malat1 is sometimes correlated with lower cell quality. 
+I found that a subset of batch1 specific cells are enriched in malat1, ie have a higher proportion of malat1 reads per cell.
+But from looking at the genes that are enriched in these clusters, they look like sodium channels, so they might be neurons? But why would they only show on 
+
+Ok so the other explanation was maybe these are real cells, but the integration failed somehow?
+So I checked the integration ppline and noticed I was clustering on the SCT and not on the integrated. 
+So maybe I will re-do the analysis with the integrated clusters:
+- Diff abundance
+- Diff expression
+- Markers
+
+But I will start with inter cluster comparison in results/re_do_clusters.
+
+- Get list of genes per GO category. data_output/surat_objects/de_pseudobulk_go.csv.
+- I started working on the subclustering of Tbr2 + cells in results/subcluster_tbr2.Rmd.
+
+
+# 2021-12-2
+
+- It might be a good idea to make functions to automate all analyses I've done before to run them again with variations of seruat_objects.
+
+The new seurat_objects would be:
+- New integrated clusters
+- Only batch1, only batch2
+- Malat1 filtered  
+
+The automated analyses would be:
+- Diff abundance
+- Diff expression
+- Diff expression only 1 rep (wilcox maybe deseq)
+
+- Checked Jing new cell type information.
+
+# 2021-12-3
+
+- Check for WNT pathway genes expression / enrichment in results/wnt_pathway_exploration.Rmd.
+It doesn't look like there is a trend there. 
+
+- cyclin feature plots
+
+# 2021-12-6
+- Work on litter2 analyses:
+- For Jing: Get umap, clusters, and markers for the new clusters
+- Do diff exp
+- Do diff abundance
+- Do cell cycle
+
+# 2021-12-07
+- Found this benchmark of different tools to do DE:
+- https://www.nature.com/articles/s41467-020-19894-4
+http://www.bioconductor.org/packages/release/bioc/vignettes/muscat/inst/doc/analysis.html
+The vignette has a couple of interesting visualizations, like mds plots
+- Another article that has pseudobulk, https://www.nature.com/articles/s41467-021-25960-2
+
+- Other interesting stuff:
+Compare hierarchies of cells -> https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8127214/
+Pseudobulk is underpowered -> https://pubmed.ncbi.nlm.nih.gov/33531494/
+Machine learning separation of cells -> https://github.com/neurorestore/Augur
+
+- For today:
+Sub-clustering of Tbr2+ intermediate progenitors with:
+3,6,13,16,18,21,
+
+From these analyses it seems clear that there is an increase in cycling intermediate progenitors.
+
+# 2021-12-08
+- Do the same DA, DE, cell cycle analyses, but with all four replicates
+- By doing these, there are some differentially expressed genes in the intermediate progenitors, but the fact that some DEs are hemoglobins, changing in both directions in different clusters makes me think of problems with ambient RNA (?). So I decided to follow the ambient RNA tutorial from OSCA: http://bioconductor.org/books/3.13/OSCA.multisample/ambient-problems.html.
+
+# 2021-12-09
+- Check remove ambience problems to re-do DE
+- Re-do DE and DA with better clusters for 4 litter samples
+- Cluster separately each assay
+- So run without integration -> litter2 wt, litter2 xp, litter2 
+- Run litter1 with integration
+
+
+
