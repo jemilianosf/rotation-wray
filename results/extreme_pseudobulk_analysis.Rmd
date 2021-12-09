@@ -1,0 +1,95 @@
+---
+title: "extreme_pseudobulk"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+
+library(scater)
+library(scran)
+library(edgeR)
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+
+```
+
+
+```{r}
+sce_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+DefaultAssay(sce_obj) <- "RNA"
+
+
+sce_obj <- SingleCellExperiment(assays = list(counts = sce_obj@assays$RNA@counts), 
+                           colData = DataFrame(sce_obj@meta.data))
+
+
+```
+
+Remove cells in batch1 biased clusters:
+```{r}
+cluster_info <- readRDS("../data_output/osca_objects/batch_biased_clusters.rds")
+
+clusters_to_remove <- rownames(cluster_info[abs(cluster_info$logFC) > 2,])
+
+sce_obj <- sce_obj[,!sce_obj$seurat_clusters %in% clusters_to_remove]
+
+```
+
+
+Aggregate cells per sample to get pseudobulk.
+
+```{r}
+# Using 'label' and 'sample' as our two factors; each column of the output
+# corresponds to one unique combination of these two factors.
+summed <- aggregateAcrossCells(sce_obj, 
+    id=colData(sce_obj)[,c("sample")])
+summed$batch <- substr(summed$sample,3,3)
+```
+
+
+```{r}
+# Creating up a DGEList object for use in edgeR:
+library(edgeR)
+
+current <- summed
+y <- DGEList(counts(current), samples=colData(current))
+# Filter low abundance 
+
+keep <- filterByExpr(y, group=current$geno)
+y <- y[keep,]
+
+# Correction for composition and library size biases
+y <- calcNormFactors(y)
+
+# Design matrix
+design <- model.matrix(~ batch + geno, y$samples)
+# Estimate dipersions
+y <- estimateDisp(y,robust = T,design = design)
+
+# Fit model
+fit <- glmQLFit(y, design, robust=TRUE)
+# Test coefficients
+res <- glmQLFTest(fit, coef=ncol(design))
+
+summary(decideTests(res))
+
+```
+```{r}
+plotMDS(y)
+```
+
+
+```{r}
+topTags(res,n = Inf)$table %>%
+  ggplot(aes(logFC, - 10 * log10(PValue))) +
+  geom_point() +
+  geom_hline(yintercept = -10*log10(0.05))
+  
+```
+```{r}
+y$counts["ENSMUSG00000019874",]
+```
+
