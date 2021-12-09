@@ -1,0 +1,61 @@
+---
+title: "re_do_clusters"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+options(Seurat.memsafe = TRUE)
+source("../scripts/compare_clusters_jaccard.R")
+
+```
+
+## Re-do clusters with integrated counts
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+metadata_allsamples_sct <- seurat_obj@meta.data
+
+DefaultAssay(seurat_obj) <- "integrated"
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+metadata_allsamples_integrated <- seurat_obj@meta.data
+
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_subset_mito_integrated.rds")
+
+metadata_subset_sct <- seurat_obj@meta.data
+
+DefaultAssay(seurat_obj) <- "integrated"
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+metadata_subset_integrated <- seurat_obj@meta.data
+
+
+
+```
+
+```{r}
+metadata_allsamples_integrated$seurat_clusters <- metadata_allsamples_integrated$integrated_snn_res.1.1
+
+metadata_subset_integrated$seurat_clusters <- metadata_subset_integrated$integrated_snn_res.1.1
+
+```
+
+## Cluster - level comparison
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_allsamples_integrated, metadata_allsamples_sct)) + xlab("Integrated") + ylab("SCT")
+
+```
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_allsamples_sct, metadata_subset_sct)) + xlab("All samples") + ylab("Two samples")
+
+```
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_allsamples_integrated, metadata_subset_integrated)) + xlab("All samples integrated") + ylab("Two samples integrated")
+
+```
+
+## 
