@@ -1,0 +1,79 @@
+---
+title: "effect_of_malat_on_clustering"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+
+DimPlot(seurat_obj,group.by = "SCT_snn_res.1.1")
+DimPlot(seurat_obj,group.by = "integrated_snn_res.1.1")
+
+```
+
+
+# Quick check of what happens if we remove malat on clusters
+
+```{r}
+
+DefaultAssay(seurat_obj) <- "RNA"
+
+malat_ensembl <- bitr("Malat1",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+
+seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = malat_ensembl)
+
+seurat_obj <- subset(seurat_obj, subset = percent.malat1 < 5)
+seurat_obj$integrated_snn_res.1.1_prev <- seurat_obj$integrated_snn_res.1.1
+```
+
+```{r}
+DefaultAssay(seurat_obj) <- "integrated"
+
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 50)
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:20)
+
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+```
+
+```{r}
+DimPlot(seurat_obj)
+
+```
+
+
+```{r}
+
+DimPlot(seurat_obj,group.by = "integrated_snn_res.1.1_prev")
+DimPlot(seurat_obj,group.by = "integrated_snn_res.1.1")
+
+```
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(integrated_snn_res.1.1,levels =as.character(sort(as.numeric(unique(integrated_snn_res.1.1)))) )) %>%
+  ggplot(aes(integrated_snn_res.1.1, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(integrated_snn_res.1.1_prev,levels =as.character(sort(as.numeric(unique(integrated_snn_res.1.1_prev)))) )) %>%
+  ggplot(aes(integrated_snn_res.1.1, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+
