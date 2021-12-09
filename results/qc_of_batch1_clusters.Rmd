@@ -1,0 +1,204 @@
+---
+title: "qc_of_batch1_clusters"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+# Read batch biased cluster dats
+
+```{r }
+batch_biased_clusters <- readRDS("../data_output/osca_objects/batch_biased_clusters.rds")
+```
+
+# Read cluster markers 
+Integrated conserved markers
+```{r}
+top10_markers <- read_csv( "../data_output/surat_objects/integrated_mitoremoved_conserved_top10lfc_markers.csv")
+
+```
+
+
+```{r}
+batch_biased_clusters <- batch_biased_clusters %>%
+  rownames_to_column(var = "cluster")
+
+batch_biased_clusters %>%
+  arrange(logFC)
+```
+```{r}
+batch_biased_clusters_top5 <- batch_biased_clusters %>%
+  top_n(5,-logFC) %>%
+  arrange()
+
+```
+
+```{r}
+top10_markers[top10_markers$cluster %in% batch_biased_clusters_top5$cluster,c("SYMBOL","ensembl","cluster")]
+```
+
+# Read seurat obj
+
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+Read all markers
+```{r}
+markers_not_conserved <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated_markers.rds")
+
+```
+
+```{r}
+markers_not_conserved <- markers_not_conserved %>%
+  rownames_to_column(var = "ENSEMBL") %>%
+  mutate(ENSEMBL = substr(ENSEMBL,1,18)) 
+
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+ensembl_gene_ids_df <- bitr(unique(markers_not_conserved$ENSEMBL),fromType = "ENSEMBL",toType = c("ENTREZID","SYMBOL"),OrgDb = org.Mm.eg.db)
+
+ensembl_gene_ids_df <- ensembl_gene_ids_df[!duplicated(ensembl_gene_ids_df$ENSEMBL),]
+
+
+markers_not_conserved <- left_join(markers_not_conserved, ensembl_gene_ids_df, by = "ENSEMBL")
+```  
+
+```{r}
+top_biased_bp_go <- markers_not_conserved %>%
+  filter(cluster %in% batch_biased_clusters_top5$cluster,
+         pct.1 > 0.8) %>%
+  group_by(cluster) %>%
+  top_n(20,avg_log2FC) %>%
+  ungroup() %>%
+  drop_na() %>%
+  pull(SYMBOL) %>%
+  enrichGO(OrgDb = org.Mm.eg.db,keyType = "SYMBOL")
+
+```
+
+```{r}
+barplot(top_biased_bp_go,showCategory = 100)
+
+```
+```{r}
+top_biased_bp_go[top_biased_bp_go@result$p.adjust < 0.05]
+```
+
+
+# Check for stress markers
+
+```{r}
+markers_not_conserved %>%
+  filter(SYMBOL %in% c("Jun","Fos","B2m","ler2","Dusp1","Ddx5","Kap","Junb","Jund","Blg1"))
+```
+# Check for death markers
+```{r}
+markers_not_conserved %>%
+  filter(SYMBOL %in% c("p53", "Bax", "BCl2"))
+
+
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+death_ensembl <- bitr(c("Trp53", "Bax", "Bcl2","Malat1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+```
+
+
+```{r}
+FeaturePlot(seurat_obj, features = bitr(c("Trp53", "Bax", "Bcl2","Malat1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL,split.by = "sample") +
+  scale_color_viridis_c()
+
+
+```
+```{r}
+FeaturePlot(seurat_obj, features = death_ensembl[4],split.by = "sample") &
+  scale_color_viridis_c()
+
+FeaturePlot(seurat_obj, features = "percent.mt",split.by = "sample") &
+  scale_color_viridis_c()
+
+```
+
+
+```{r}
+VlnPlot(seurat_obj, features = death_ensembl[3],split.by = "sample")
+
+```
+
+```{r}
+FeaturePlot(seurat_obj, features = "ENSMUSG00000048758",split.by = "sample")
+VlnPlot(seurat_obj, features = "ENSMUSG00000048758",split.by = "sample")
+
+```
+```{r}
+Idents(seurat_obj) <- "seurat_clusters"
+VlnPlot(seurat_obj, features ="nFeature_RNA",split.by = "sample",idents = "5")
+VlnPlot(seurat_obj, features ="nCount_RNA",split.by = "sample",idents =batch_biased_clusters_top5$cluster)
+seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = death_ensembl[4])
+```
+
+
+
+```{r}
+Idents(seurat_obj) <- "sample"
+VlnPlot(seurat_obj, features = "ENSMUSG00000048758")
+VlnPlot(seurat_obj, features = "ENSMUSG00000092341")
+VlnPlot(seurat_obj, features = death_ensembl[4])
+VlnPlot(seurat_obj, features = "percent.malat1")
+
+
+```
+
+
+```{r}
+xist_ensembl <- bitr(c("Xist"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+VlnPlot(seurat_obj, features = xist_ensembl)
+
+```
+
+
+```{r}
+
+seurat_obj$malat_filt <- seurat_obj$percent.malat1 > 5
+FeaturePlot(seurat_obj, features = "percent.malat1",split.by = "sample") &
+  scale_color_viridis_c()
+DimPlot(seurat_obj ,group.by = "malat_filt",split.by = "sample")
+
+```
+
+# Do cells fall on the same clusters if using two vs four replicates? 
+
+```{r}
+source("../scripts/compare_clusters_jaccard.R")
+```
+
+ Read metadata files
+```{r}
+metadata_downsampled_list_files <- list.files("../data_output/surat_objects/run_11nov21/", pattern = "integrated.rds", full.names = TRUE)
+
+metadata_downsampled_list <- lapply(metadata_downsampled_list_files, read_metadata)
+
+names(metadata_downsampled_list) <- stringr::str_remove(stringr::str_remove(tools::file_path_sans_ext(basename(metadata_downsampled_list_files)),"Mm_merged_mito_"),"_integrated")
+```
+
+
+
+```{r}
+
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$mito, metadata_downsampled_list$subset_mito)) + xlab("Four samples") + ylab("Two samples")
+
+```
+
+
