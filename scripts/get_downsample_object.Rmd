@@ -1,0 +1,234 @@
+---
+title: "get_downsampling_object"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+
+```
+
+
+# Load object with previous clusters
+```{r}
+Mm_umap_subset <- readRDS("../data_output/surat_objects/Mm_umap_integrated_subset_rep.rds")
+
+```
+
+# Identify cells that belong to high counts clusters
+```{r}
+Mm_umap_subset@meta.data %>%
+  ggplot(aes(nFeature_RNA)) +
+  geom_histogram() +
+  geom_vline(xintercept = 2500) + 
+    geom_vline(xintercept = 3500) 
+
+```
+```{r}
+Mm_umap_subset$is_high <- Mm_umap_subset$nFeature_RNA > 2500
+```
+
+Which clusters are high?
+```{r}
+cluster_by_ishigh <- table(Mm_umap_subset$seurat_clusters, Mm_umap_subset$is_high)
+
+high_clusters <- rownames(cluster_by_ishigh)[apply(cluster_by_ishigh,1,function(x) x[1]<x[2])]
+
+Mm_umap_subset$cluster_is_high <- Mm_umap_subset$seurat_clusters %in% high_clusters
+```
+
+Get cells in high clusters
+```{r}
+cells_in_high_clusters <- Cells(Mm_umap_subset)[Mm_umap_subset$cluster_is_high]
+```
+
+Clean memory
+```{r}
+rm(Mm_umap_subset)
+gc()
+```
+
+```{r}
+get_high_cells_from_seurat <- function(seurat_obj, what_is_high = 2500) {
+  seurat_obj$is_high <- seurat_obj$nFeature_RNA > what_is_high
+  cluster_by_ishigh <- table(seurat_obj$seurat_clusters, seurat_obj$is_high)
+  
+  high_clusters <- rownames(cluster_by_ishigh)[apply(cluster_by_ishigh,1,function(x) x[1]<x[2])]
+  
+  seurat_obj$cluster_is_high <- seurat_obj$seurat_clusters %in% high_clusters
+  cells_in_high_clusters <- Cells(seurat_obj)[seurat_obj$cluster_is_high]
+  return(cells_in_high_clusters)
+}
+```
+
+
+# Subsample these cells in o.g. objects
+```{r}
+Mm.merged.subset <- readRDS( file = "../data_output/surat_objects/Mm_merged_mito_subset.rds")
+
+#Mm.merged.subset_mito <- saveRDS("../data_output/surat_objects/Mm_merged_mito_subset_mito.rds")
+
+```
+
+```{r}
+cells_in_high_clusters_filter <- Cells(Mm.merged.subset) %in% cells_in_high_clusters
+```
+
+```{r}
+# Get non zero element
+Mm.merged.subset.downsampled <- Mm.merged.subset
+Mm.merged.subset.downsampled@assays$RNA@counts[,cells_in_high_clusters_filter] <- floor(Mm.merged.subset.downsampled@assays$RNA@counts[,cells_in_high_clusters_filter] * 0.25)
+
+```
+
+```{r}
+Mm.merged.subset.downsampled@meta.data$nFeature_RNA_downsampled <- apply(Mm.merged.subset.downsampled@assays$RNA@counts,2,Matrix::nnzero)
+Mm.merged.subset.downsampled@meta.data$nCountRNA_downsampled <- apply(Mm.merged.subset.downsampled@assays$RNA@counts,2,sum)
+
+
+Mm.merged.subset.downsampled@meta.data %>%
+  ggplot(aes(nFeature_RNA_downsampled)) +
+  geom_histogram() +
+  facet_grid(rows = cells_in_high_clusters_filter)
+
+
+Mm.merged.subset.downsampled@meta.data %>%
+  ggplot(aes(nCountRNA_downsampled)) +
+  geom_histogram() +
+  facet_grid(rows = cells_in_high_clusters_filter)
+
+```
+```{r}
+Mm.merged.subset.downsampled@meta.data %>%
+  ggplot(aes(nFeature_RNA)) +
+  geom_histogram() +
+  geom_vline(xintercept = 2500) + 
+    geom_vline(xintercept = 3500) 
+
+```
+
+```{r}
+Mm.merged.subset.downsampled
+```
+
+
+# Downsample all four seurat mito objects 
+
+```{r}
+downscale_seurat <- function(seurat_obj, which_cells, how_much = 0.25) {
+  # Downscale
+  seurat_obj@assays$RNA@counts[,which_cells] <- floor(seurat_obj@assays$RNA@counts[,which_cells] * how_much)
+  # Update features
+  seurat_obj@meta.data$nFeature_RNA <- apply(seurat_obj@assays$RNA@counts,2,Matrix::nnzero)
+  seurat_obj@meta.data$nCount_RNA <- apply(seurat_obj@assays$RNA@counts,2,sum)
+  
+  return(seurat_obj)
+}
+
+get_high_cells_from_seurat <- function(seurat_obj, what_is_high = 2500) {
+  seurat_obj$is_high <- seurat_obj$nFeature_RNA > what_is_high
+  cluster_by_ishigh <- table(seurat_obj$seurat_clusters, seurat_obj$is_high)
+  
+  high_clusters <- rownames(cluster_by_ishigh)[apply(cluster_by_ishigh,1,function(x) x[1]<x[2])]
+  
+  seurat_obj$cluster_is_high <- seurat_obj$seurat_clusters %in% high_clusters
+  cells_in_high_clusters <- Cells(seurat_obj)[seurat_obj$cluster_is_high]
+  return(cells_in_high_clusters)
+}
+downsample_seurat_from_file <- function(file_clusters,file_raw) {
+  which_cells <- get_high_cells_from_seurat(seurat_obj = readRDS(file_clusters))
+  seurat_obj <- downscale_seurat(seurat_obj = readRDS( file = file_raw),which_cells = which_cells)
+  
+  saveRDS(seurat_obj,file =  paste0(tools::file_path_sans_ext(file_raw),"_downsample.rds")
+)
+}
+
+```
+
+```{r}
+seurat_obj_file_list <- list.files("../data_output/surat_objects", pattern = "mito",full.names = T)
+seurat_obj_file_list <- seurat_obj_file_list[!str_detect(seurat_obj_file_list,"rep")]
+
+seurat_umap_file_list <- list.files("../data_output/surat_objects/run_8nov21", pattern = "integrated.rds",full.names = T)
+seurat_umap_file_list <- seurat_umap_file_list[c(2,4,3,1)]
+
+ 
+walk2(seurat_umap_file_list, seurat_obj_file_list, downsample_seurat_from_file)
+
+
+```
+
+Re-filter objects
+```{r}
+seurat_obj_file_list <- list.files("../data_output/surat_objects", pattern = "downsample",full.names = T)
+seurat_obj_list<- map(seurat_obj_file_list, readRDS)
+```
+
+Re-calculate mito content
+```{r}
+
+matrix_dir = "../data_raw/scmm_project/G_A1/outs/filtered_feature_bc_matrix/"
+features.path <- paste0(matrix_dir, "features.tsv.gz")
+feature.names = read.delim(features.path,
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+mito_features <- feature.names$V1[stringr::str_detect(feature.names$V2,"^mt-")]
+
+seurat_obj_list[[2]][["percent.mt"]] <- PercentageFeatureSet(seurat_obj_list[[2]],features = mito_features)
+seurat_obj_list[[4]][["percent.mt"]] <- PercentageFeatureSet(seurat_obj_list[[4]],features = mito_features)
+
+
+```
+
+Re- filter
+```{r}
+seurat_obj_list <- map(seurat_obj_list, ~ subset(.x, subset = nFeature_RNA > 500 & nFeature_RNA < 7500 & nCount_RNA < 50000 & percent.mt < 5))
+
+
+```
+
+Save filtered objects
+```{r}
+walk2(seurat_obj_list, seurat_obj_file_list, saveRDS)
+
+```
+
+# Get separate cluster annotation for high counts clusters
+```{r}
+get_high_cells_seurat_from_file <- function(file_clusters,file_raw) {
+  which_cells <- get_high_cells_from_seurat(seurat_obj = readRDS(file_clusters))
+
+  return(which_cells)
+}
+get_high_clusters_seurat_from_file <- function(file_clusters,file_raw, what_is_high = 2500) {
+  seurat_obj <- readRDS(file_clusters)
+  
+  seurat_obj$is_high <- seurat_obj$nFeature_RNA > what_is_high
+  cluster_by_ishigh <- table(seurat_obj$seurat_clusters, seurat_obj$is_high)
+  
+  high_clusters <- rownames(cluster_by_ishigh)[apply(cluster_by_ishigh,1,function(x) x[1]<x[2])]
+  
+  return(high_clusters)
+}
+
+
+seurat_umap_file_list <- list.files("../data_output/surat_objects/run_8nov21", pattern = "integrated.rds",full.names = T)
+
+
+high_counts_list <- lapply(seurat_umap_file_list, get_high_cells_seurat_from_file)
+high_clusters_list <- lapply(seurat_umap_file_list, get_high_clusters_seurat_from_file)
+
+names(high_counts_list) <- basename(seurat_umap_file_list)
+names(high_clusters_list) <- basename(seurat_umap_file_list)
+saveRDS(high_counts_list, "../data_output/surat_objects/high_counts_list_11nov21.rds")
+saveRDS(high_clusters_list, "../data_output/surat_objects/high_clusters_list_11nov21.rds")
+
+```
+
+
