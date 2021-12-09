@@ -1,0 +1,66 @@
+---
+title: "feature_plots_of_markers"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(Seurat)
+```
+
+
+# Read seurat object
+
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+# Read markers
+
+Integrated conserved markers
+```{r}
+top10_markers <- read_csv( "../data_output/surat_objects/integrated_mitoremoved_conserved_top10lfc_markers.csv")
+
+```
+```{r}
+top10_markers$...1 <- NULL
+```
+
+
+Previous markers
+```{r}
+previous_markers <- readRDS(file = "../data_raw/scmm_project/Analysis/Mm_umap_integrated_markers_subset.rds")
+
+```
+
+Known Markers
+
+# Feature plots
+
+## Tbr2
+```{r}
+FeaturePlot(seurat_obj,features = c("ENSMUSG00000032446","ENSMUSG00000036904"),label = TRUE,repel = TRUE) 
+VlnPlot(seurat_obj,features = c("ENSMUSG00000032446") )
+
+```
+```{r}
+FeaturePlot(seurat_obj,features = c("ENSMUSG00000035033","ENSMUSG00000036904"),label = TRUE,repel = TRUE) 
+VlnPlot(seurat_obj,features = "ENSMUSG00000035033") 
+```
+
+## Basal progenitors
+
+### Dividing intermediate progenitors
+### Mature intermediate progenitors
+
+## Apical progenitors
+
+## Neurons
+
+### Interneurons 
+
+
