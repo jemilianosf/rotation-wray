@@ -1,0 +1,298 @@
+---
+title: "check_new_runs_11nov21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(Seurat)
+library(tidyverse)
+
+options(Seurat.memsafe = TRUE)
+
+```
+
+
+
+# Read high vs low count cluster information
+```{r}
+high_counts_list <- readRDS( "../data_output/surat_objects/high_counts_list_11nov21.rds")
+
+```
+
+# All samples
+
+## With mito 
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+
+## With mito downsampled
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_downsample_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+Mm_umap@meta.data$is_high <- rownames(Mm_umap@meta.data) %in% high_counts_list$Mm_merged_mito_integrated.rds
+
+DimPlot(Mm_umap,reduction = "umap", group.by= "is_high")
+
+```
+
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+## Without mito 
+
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_mito_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+## Without mito downsampled
+
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_mito_downsample_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+Mm_umap@meta.data$is_high <- rownames(Mm_umap@meta.data) %in% high_counts_list$Mm_merged_mito_mito_integrated.rds
+
+DimPlot(Mm_umap,reduction = "umap", group.by= "is_high")
+
+```
+
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+
+
+# Two samples
+
+## With mito 
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_subset_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+## With mito downsampled
+
+
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_subset_downsample_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+Mm_umap@meta.data$is_high <- rownames(Mm_umap@meta.data) %in% high_counts_list$Mm_merged_mito_subset_integrated.rds
+
+DimPlot(Mm_umap,reduction = "umap", group.by= "is_high")
+
+```
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+## Without mito 
+
+
+
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_subset_mito_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+## Without mito downsampled
+
+```{r}
+Mm_umap <- readRDS("../data_output/surat_objects/run_11nov21/Mm_merged_mito_subset_mito_downsample_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+if("ENSMUSG00000027168" %in% rownames(Mm_umap)){
+  FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+}
+Mm_umap$nFeature_RNA_log <- log10(Mm_umap$nFeature_RNA+1)
+FeaturePlot(Mm_umap, features = c("nFeature_RNA_log")) +
+  scale_color_viridis_c()
+
+```
+
+```{r}
+Mm_umap@meta.data$is_high <- rownames(Mm_umap@meta.data) %in% high_counts_list$Mm_merged_mito_subset_mito_integrated.rds
+
+DimPlot(Mm_umap,reduction = "umap", group.by= "is_high")
+
+```
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+
+# Comparison at the marker level
+```{r}
+marker_files <- list.files("../data_output/surat_objects/run_11nov21/",pattern = "markers", full.names = TRUE)
+
+
+top_n_markers_from_file <- function(file, n = 10) {
+  markers <- readRDS(file)
+  markers <- markers %>%
+    group_by(cluster) %>% 
+    top_n(n = n, wt = avg_log2FC) %>%
+    pull("gene")
+  return(markers)
+}
+
+markers_list <- lapply(marker_files, top_n_markers_from_file)
+
+names(markers_list) <- str_remove(str_remove(tools::file_path_sans_ext(basename(marker_files)),"Mm_merged_mito_"),"_integrated_markers")
+```
+
+
+```{r}
+library(UpSetR)
+
+upset(fromList(markers_list),nsets = 8,order.by = "freq",sets = rev(c("downsample","mito","mito_downsample","subset","subset_downsample","subset_mito","subset_mito_downsample")),keep.order = TRUE)
+```
+
+
