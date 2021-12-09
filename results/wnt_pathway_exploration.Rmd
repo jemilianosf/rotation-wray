@@ -1,0 +1,188 @@
+---
+title: "wnt_pathway_exploration"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+```
+
+# Get gene set from gsea
+```{r}
+
+mmu_kegg <- clusterProfiler::download_KEGG(species ="mmu")
+
+wnt_pathway <- mmu_kegg$KEGGPATHID2NAME[str_detect(mmu_kegg$KEGGPATHID2NAME$to,"W"), ]
+
+wnt_pathway_entrez_genes <- mmu_kegg$KEGGPATHID2EXTID %>%
+  filter(from == wnt_pathway$from )
+
+wnt_pathway_genes <- clusterProfiler::bitr(wnt_pathway_entrez_genes$to,OrgDb = org.Mm.eg.db,fromType = "ENTREZID",toType=c("ENSEMBL","SYMBOL"))
+
+
+```
+# Look at expression in pseudobulk 
+
+Read log norm summed pseudobulk count matrix and filter to get only WNT genes
+
+```{r}
+lognormsummed <- readRDS("../data_output/osca_objects/lognormsummed_pseudobulk_de.Rds")
+
+wnt_pathway_genes <- wnt_pathway_genes[wnt_pathway_genes$ENSEMBL %in% rownames(lognormsummed),]
+
+lognormsummed <- lognormsummed[wnt_pathway_genes$ENSEMBL,]
+
+
+
+```
+
+Read DE genes from pseudobulk
+
+```{r}
+de_results_per_clust_sig <- read_csv("../data_output/surat_objects/deg_pseudobulk_per_cluster_fdr0.05_df.csv")
+
+```
+
+Tidy counts matrix
+```{r}
+count_mat <- assay(lognormsummed, "logcounts")
+
+colnames(count_mat) <-
+paste(lognormsummed$sample,
+lognormsummed$geno,
+lognormsummed$seurat_clusters,sep   = "_")
+
+counts_df <- as.data.frame(count_mat) %>%
+  rownames_to_column(var = "ENSEMBL") %>%
+  pivot_longer(cols = -ENSEMBL) %>%
+  mutate(sample = str_split(name, "_") %>% map_chr(1),
+         geno = str_split(name, "_") %>% map_chr(2),
+         seurat_clusters = str_split(name, "_") %>% map_chr(3))
+
+```
+
+
+Assign gene symbols
+```{r}
+counts_df <- left_join(counts_df , wnt_pathway_genes)
+```
+
+Boxplot
+```{r}
+counts_df %>%
+  ggplot(aes(geno, value, color = sample)) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5) +
+  theme_light() +
+  facet_wrap(~seurat_clusters) +
+  scale_color_brewer(type = "div")
+  
+```
+Heatmap
+```{r}
+library("tidyHeatmap")
+
+counts_df %>%
+  filter(seurat_clusters==1) %>%
+  heatmap(SYMBOL,name , value,.scale = "row", palette_value = RColorBrewer::brewer.pal(3,"PRGn"),cluster_columns = FALSE) %>%
+  add_tile(geno)
+
+
+```   
+
+```{r}
+count_mat_wt1 <- as.data.frame(count_mat) %>%
+  dplyr::select(starts_with("WT1"))
+count_mat_xp1 <- as.data.frame(count_mat) %>%
+  dplyr::select(starts_with("XP1"))
+count_mat_wt2 <- as.data.frame(count_mat) %>%
+  dplyr::select(starts_with("WT2"))
+count_mat_xp2 <- as.data.frame(count_mat) %>%
+  dplyr::select(starts_with("XP2"))
+
+diff_df <- cbind(count_mat_wt1 - count_mat_xp1,
+count_mat_wt2 - count_mat_xp2)
+
+
+```
+
+
+```{r}
+diff_df <- diff_df %>%
+    rownames_to_column(var = "ENSEMBL") %>%
+  pivot_longer(cols = -ENSEMBL) %>%
+  mutate(litter = str_split(name, "_") %>% map_chr(1) %>% substr(3,3),
+         seurat_clusters = str_split(name, "_") %>% map_chr(3))
+
+
+diff_df <- left_join(diff_df , wnt_pathway_genes)
+
+```
+
+```{r}
+
+diff_df <- diff_df %>% mutate(name = paste(seurat_clusters, litter))
+
+diff_df_list <- split(diff_df, diff_df$seurat_clusters)
+   
+
+imap(diff_df_list, function(.x,.y){
+  .x %>%
+    heatmap(SYMBOL,name , value,.scale = "none", palette_value = RColorBrewer::brewer.pal(3,"PRGn"), cluster_columns = FALSE, column_title = .y)  
+
+})
+
+```
+
+Are some of the DE in the Wnt pathway?
+
+```{r}
+de_results_per_clust_sig[de_results_per_clust_sig$ENSEMBL %in% wnt_pathway_genes$ENSEMBL,]
+```
+
+This is a negative regulator of the pathway!
+```{r}
+de_results_df <- readRDS("../data_output/surat_objects/deg_pseudobulk_per_cluster.Rds")
+
+de_results_df$wnt <- de_results_df$ENSEMBL %in% wnt_pathway_genes$ENSEMBL
+```
+
+What is the fold change on average of these genes?
+```{r}
+de_results_df %>%
+  drop_na() %>%
+  ggplot(aes(logCPM, logFC)) +
+  geom_point(size = 0.5, pch = 1, color = "gray") +
+  geom_point(data = drop_na(de_results_df) %>%
+               filter(wnt),size = 0.5, pch = 1, color = "blue") +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  facet_wrap(vars(cluster)) +
+  theme_light() +
+  ylim(c(-2,2)) +
+  theme(aspect.ratio = 1) 
+
+  
+```
+
+```{r}
+de_results_df %>%
+  drop_na() %>%
+  filter(wnt) %>%
+  ggplot(aes(logCPM, logFC, color = -10 * log10(FDR))) +
+  geom_point(size = 0.5) +
+  scale_color_viridis_c(option = "A") +
+  facet_wrap(vars(cluster)) +
+  theme_light() +
+  ylim(c(-2,2)) +
+  theme(aspect.ratio = 1) +
+  geom_hline(yintercept = 0.5) +
+  geom_hline(yintercept = - 0.5) 
+
+
+  
+```
+# Look at expression in single cells 
+
