@@ -1,0 +1,306 @@
+---
+title: "de_pseudobulk_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+
+library(scater)
+library(scran)
+library(edgeR)
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+
+```
+
+## Aim
+
+The aim of this analysis is to obtain differentially expressed genes between experimental and wild type genotypes intra cluster, taking into account biological replicates.
+
+## Analysis overview 
+
+1. Sum all counts per gene within each cluster within each experimental condition.
+2. For each cluster, do DE test with edgeR.
+3. Combine results from each test to get an overview of DEGs among clusters.
+
+## Pre-processing and summarizing counts
+
+Read in seurat object and convert it to single cell experiment object that is compatible with bioconductor packages.
+
+```{r}
+sce_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+DefaultAssay(sce_obj) <- "RNA"
+
+
+sce_obj <- SingleCellExperiment(assays = list(counts = sce_obj@assays$RNA@counts), 
+                           colData = DataFrame(sce_obj@meta.data))
+
+
+```
+
+Remove cells in batch1 biased clusters:
+```{r}
+cluster_info <- readRDS("../data_output/osca_objects/batch_biased_clusters.rds")
+
+clusters_to_remove <- rownames(cluster_info[abs(cluster_info$logFC) > 2,])
+
+sce_obj <- sce_obj[,!sce_obj$seurat_clusters %in% clusters_to_remove]
+
+```
+
+
+Aggregate cells per cluster per sample to get pseudobulk.
+
+```{r}
+# Using 'label' and 'sample' as our two factors; each column of the output
+# corresponds to one unique combination of these two factors.
+summed <- aggregateAcrossCells(sce_obj, 
+    id=colData(sce_obj)[,c("seurat_clusters","sample")])
+summed$batch <- substr(summed$sample,3,3)
+```
+
+
+## Pseudobulk edgeR for each cluster
+
+```{r}
+de_results <- pseudoBulkDGE(summed,
+                            sample = summed$sample,
+    label=summed$seurat_clusters,
+    design= ~ batch + geno,
+    contrast = "genoXP",
+    condition=summed$geno
+)
+
+```
+
+```{r}
+is_de <- decideTestsPerLabel(de_results, threshold=0.05)
+summarizeTestsPerLabel(is_de)
+
+```
+
+Check cell abundance per replicate in clusters that show DE
+
+```{r}
+summarizeTestsPerLabel(is_de)[summarizeTestsPerLabel(is_de)[,1] != 0 | summarizeTestsPerLabel(is_de)[,3] != 0,]
+```
+```{r}
+de_clusters <- rownames(summarizeTestsPerLabel(is_de)[summarizeTestsPerLabel(is_de)[,1] != 0 | summarizeTestsPerLabel(is_de)[,3] != 0,])
+```
+
+```{r}
+colData(sce_obj) %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) ),
+         is_da = seurat_clusters %in% de_clusters) %>%
+  filter(is_da) %>%
+  ggplot(aes(seurat_clusters, fill =  sample)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+```{r}
+cluster_info[de_clusters,] %>%
+  ggplot(aes(logFC,-10*log10(PValue))) +
+  geom_point()
+```
+
+```{r}
+de_clusters_no_cell_changes <- de_clusters[abs(cluster_info[de_clusters,]$logFC) < 1]
+```
+
+```{r}
+de_clusters_no_cell_changes
+```
+
+```{r}
+de_results <- de_results[de_clusters_no_cell_changes]
+```
+
+
+## Obtain lognorm counts for visualization
+```{r}
+lognormsummed <- summed
+sizeFactors(lognormsummed) <- NULL
+lognormsummed <- logNormCounts(lognormsummed)
+
+```
+
+```{r eval = FALSE}
+saveRDS(lognormsummed, "../data_output/osca_objects/lognormsummed_pseudobulk_de.Rds")
+```
+
+
+## Inspect DE results per cluster
+
+Biological variation plots
+
+```{r}
+lapply(names(de_results),
+      function(title,x) {
+        plotBCV(metadata(x[[title]])$y)
+        title(main = title)
+      }, x = de_results)
+
+```
+
+Volcano plots
+
+```{r}
+de_results_df <- do.call(rbind,lapply(names(de_results),
+      function(title,x) {
+        x <- x[[title]]
+        x <- as.data.frame(x)
+        x$cluster <- title
+        x <- x %>%
+          rownames_to_column(var = "ENSEMBL")
+        return(x)
+      }, x = de_results))
+
+de_results_df <- drop_na(de_results_df)
+```
+
+```{r}
+library(org.Mm.eg.db)
+
+ens2symbol <- clusterProfiler::bitr(de_results_df$ENSEMBL,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+de_results_df <- left_join(de_results_df, ens2symbol,by= "ENSEMBL")
+```
+
+```{r eval = FALSE}
+saveRDS(de_results_df,"../data_output/surat_objects/deg_pseudobulk_per_cluster.Rds")
+```
+
+
+```{r}
+de_results_df %>%
+  ggplot(aes(logFC, -10 * log10(FDR), color = FDR < 0.05)) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  facet_wrap(vars(cluster)) +
+  geom_hline(yintercept = -10 * log10(0.05), color = "red", linetype = "dashed" ) +
+  theme_light() +
+  theme(aspect.ratio = 1) +
+  ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),data = de_results_df %>%
+                             filter(FDR < 0.05),color = "black",max.overlaps = 30, size = 3) 
+
+
+```
+```{r}
+de_results_df %>%
+  ggplot(aes(logFC, -10 * log10(FDR), color = FDR < 0.05)) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  xlim(c(-2.5,2.5)) +
+  ylim(c(0,50)) +
+  facet_wrap(vars(cluster)) +
+  geom_hline(yintercept = -10 * log10(0.05), color = "red", linetype = "dashed" ) +
+  theme_light() +
+  theme(aspect.ratio = 1) 
+
+```
+
+```{r}
+de_results_df %>%
+  drop_na() %>%
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05)) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  facet_wrap(vars(cluster)) +
+  theme_light() +
+  theme(aspect.ratio = 1) 
+
+  
+```
+
+```{r}
+
+de_results_per_clust_sig <- de_results_df[de_results_df$FDR < 0.05 ,]
+
+```
+```{r eval = FALSE}
+write.csv(de_results_per_clust_sig,"../data_output/surat_objects/deg_pseudobulk_per_cluster_fdr0.05_df.csv")
+```
+```{r}
+de_results_per_clust_sig <- read_csv("../data_output/surat_objects/deg_pseudobulk_per_cluster_fdr0.05_df.csv")
+
+```
+
+General BP GO enrichment
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+de_go <- enrichGO(bitr(de_results_per_clust_sig$ENSEMBL,OrgDb = org.Mm.eg.db,fromType = "ENSEMBL",toType = "SYMBOL")$SYMBOL,OrgDb = org.Mm.eg.db,keyType = "SYMBOL",ont = "BP")
+
+
+barplot(de_go,showCategory = 100)
+```
+```{r eval = FALSE}
+write.csv(de_go@result[de_go@result$p.adjust < 0.05, c("ID","Description","geneID")],"../data_output/surat_objects/deg_pseudobulk_go.csv")
+```
+
+
+## DE genes 
+
+
+```{r}
+plotExpresion_by_clusts <- function(feature, counts){
+  plotExpression(counts,
+    features=feature,
+    x="geno", colour_by="geno",
+    other_fields="seurat_clusters") +
+    facet_wrap(~seurat_clusters) +
+  theme(aspect.ratio = 1)
+}
+```
+
+```{r}
+lognormsummed_diff <- lognormsummed[de_results_per_clust_sig$ENSEMBL]
+rownames(lognormsummed_diff) <- de_results_per_clust_sig$SYMBOL
+
+
+lognormsummed_diff <- lognormsummed_diff[!is.na(rownames(lognormsummed_diff))]
+
+
+
+imap(sapply(split(de_results_per_clust_sig$cluster,f = de_results_per_clust_sig$SYMBOL), paste, collapse = ", "),~ plotExpresion_by_clusts(.y, counts = lognormsummed_diff) + ggtitle(paste(.y,.x)) + theme(aspect.ratio = 1))
+
+```
+
+FZD8
+
+```{r}
+plotExpression(lognormsummed,
+    features="ENSMUSG00000036904",
+    x="geno", colour_by="geno",
+    other_fields="seurat_clusters") +
+    facet_wrap(~seurat_clusters) +
+  theme(aspect.ratio = 1)
+
+```
+
+## Cluster specific DE
+
+Although most DE genes are only so in a single cluster, after inspecting the gene plots, we find that some of the DE genes also have different counts in other clusters.
+
+The cluster specific DE tests the average log fold change of all clusters.
+
+
+```{r}
+de_specific <- pseudoBulkSpecific(summed,
+    label=summed$seurat_clusters,
+    design=~ batch + geno,
+    coef="genoXP",
+    condition=summed$geno
+)
+
+
+summarizeTestsPerLabel(decideTestsPerLabel(de_specific,threshold = 0.5))
+```
+
