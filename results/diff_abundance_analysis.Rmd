@@ -1,0 +1,211 @@
+---
+title: "diff_abundance_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+
+library(Seurat)
+library(tidyverse)
+library(edgeR)
+library(scran)
+```
+
+
+## Aim
+
+The aim of differential abundance is to test for changes in cell type composition between WT and XP conditions: http://bioconductor.org/books/3.14/OSCA.multisample/differential-abundance.html
+
+
+## Analysis overview
+
+1. Count number of cells per cluster per condition per replicate 
+2. Test for differential abundance using edgeR
+
+## Pre-processing and summarizing counts
+```{r}
+sce_obj <- as.SingleCellExperiment(readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds"))
+
+
+abundances <- table(sce_obj$seurat_clusters, sce_obj$sample) 
+abundances <- unclass(abundances) 
+
+
+extra_info <- colData(sce_obj)[match(colnames(abundances), sce_obj$sample),]
+extra_info$batch <- factor(substr(extra_info$sample,3,3))
+extra_info$geno <- factor(extra_info$geno)
+y_ab <- DGEList(abundances, samples=extra_info)
+
+```
+
+
+## Testing for DA
+
+Design matrix
+```{r}
+
+design <- model.matrix(~ batch + geno, y_ab$samples)
+
+```
+
+Estimate dispersions
+```{r}
+y_ab <- calcNormFactors(y_ab)
+y_ab <- estimateDisp(y_ab, design, trend="none")
+
+plotBCV(y_ab, cex=1)
+
+```
+
+```{r}
+fit_ab <- glmQLFit(y_ab, design, robust=TRUE, abundance.trend=FALSE)
+
+```
+
+```{r}
+res <- glmQLFTest(fit_ab, coef=ncol(design))
+summary(decideTests(res))
+
+```
+
+
+There seem not to be any differentially abundant cell types (or these are just too variable between batches that it's not really reliable).
+```{r}
+topTags(res,sort.by = "PValue", n = 5)$table
+```
+
+
+## Top 5 by pvalue: 
+```{r}
+colData(sce_obj) %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) ),
+         is_da = seurat_clusters %in% rownames(topTags(res,sort.by = "PValue", n = 5))) %>%
+  filter(is_da) %>%
+  ggplot(aes(seurat_clusters, fill =  sample,)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+
+## Use DA analysis to identify batch specific clusters
+
+Design matrix
+```{r}
+
+design <- model.matrix(~ batch, y_ab$samples)
+y_ab <- calcNormFactors(y_ab)
+y_ab <- estimateDisp(y_ab, design, robust = TRUE, trend="none")
+
+```
+
+```{r}
+plotBCV(y_ab, cex=1)
+```
+
+
+```{r}
+fit_ab <- glmQLFit(y_ab, design, robust=TRUE, abundance.trend=FALSE)
+
+res <- glmQLFTest(fit_ab, coef=ncol(design))
+
+```
+
+```{r}
+summary(decideTests(res,p.value = 0.001,lfc = 0.5))
+```
+
+
+```{r}
+topTags(res,sort.by = "PValue", n = Inf)$table %>%
+  ggplot(aes(logFC, - 10 * log10(FDR))) +
+  geom_point() +
+  theme(aspect.ratio = 1) +
+  geom_hline(yintercept = - 10 * log10(0.001)) +
+  geom_vline(xintercept = -3)
+```
+Clusters to remove:
+
+```{r}
+res$table[decideTests(res,lfc = 3,p.value = 1)<0,]
+```
+
+```{r eval = FALSE, include = FALSE}
+saveRDS(res$table,"../data_output/osca_objects/batch_biased_clusters.rds")
+```
+
+
+```{r}
+clust_to_remove <- rownames(res$table[decideTests(res,lfc = 3,p.value = 1)<0,])
+```
+
+
+```{r}
+colData(sce_obj) %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) ),
+         is_da = seurat_clusters %in% clust_to_remove) %>%
+  filter(is_da) %>%
+  ggplot(aes(seurat_clusters, fill =  sample,)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
+
+
+## Re-do analysis without problematic clusters
+
+## Testing for DA
+
+```{r}
+y_ab <- y_ab[! rownames(y_ab) %in% clust_to_remove,]
+```
+
+
+Design matrix
+```{r}
+
+design <- model.matrix(~ batch + geno, y_ab$samples)
+
+```
+
+Estimate dispersions
+```{r}
+y_ab <- calcNormFactors(y_ab)
+y_ab <- estimateDisp(y_ab, design,robust = TRUE, trend="none")
+
+plotBCV(y_ab, cex=1)
+
+```
+
+```{r}
+fit_ab <- glmQLFit(y_ab, design, robust=TRUE, abundance.trend=FALSE)
+
+```
+
+```{r}
+res <- glmQLFTest(fit_ab, coef=ncol(design))
+summary(decideTests(res))
+
+```
+
+
+There seem not to be any differentially abundant cell types (or these are just too variable between batches that it's not really reliable).
+```{r}
+topTags(res,sort.by = "PValue", n = 5)$table
+```
+
+
+## Top 5 by pvalue: 
+```{r}
+colData(sce_obj) %>%
+  as_data_frame() %>%
+  mutate(seurat_clusters = ordered(seurat_clusters,levels =as.character(sort(as.numeric(unique(seurat_clusters)))) ),
+         is_da = seurat_clusters %in% rownames(topTags(res,sort.by = "PValue", n = 5))) %>%
+  filter(is_da) %>%
+  ggplot(aes(seurat_clusters, fill =  sample,)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "div")
+
+```
