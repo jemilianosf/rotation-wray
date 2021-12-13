@@ -1,0 +1,435 @@
+---
+title: "litter2_independent_cluster"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+```
+
+# Cluster WT and HARE5 independently
+
+# Read seurat object
+```{r }
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+seurat_obj <- seurat_obj[,seurat_obj$sample == "WT2"]
+
+```
+
+# Re-Clustering
+```{r eval = FALSE}
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj <- SCTransform(seurat_obj, method = "glmGamPoi")
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
+
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:50)
+
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:50)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+
+# UMAP
+```{r}
+DimPlot(seurat_obj,label = TRUE) + theme(aspect.ratio = 1)
+```
+
+# Find markers
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+```
+
+```{r}
+top30_markers <- markers %>%
+  group_by(cluster) %>%
+  top_n(30,avg_log2FC)
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(top30_markers, "../data_output/surat_objects/wt2_top30lfc_markers.csv")
+```
+
+```{r eval = FALSE}
+saveRDS(seurat_obj,file = "../data_output/surat_objects/wt2_seurat_obj.Rds")
+```
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/wt2_seurat_obj.Rds")
+
+```
+
+
+Cell cycle
+```{r eval = FALSE}
+set.seed(100)
+
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(as.SingleCellExperiment(seurat_obj), mm.pairs, gene.names=rownames(seurat_obj))
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments_litter2_wt.rds")
+```
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+
+```{r}
+seurat_obj$G1 <- assignments$normalized.scores$G1
+seurat_obj$S <- assignments$normalized.scores$S
+seurat_obj$G2M <- assignments$normalized.scores$G2M
+seurat_obj$phases <- assignments$phases
+
+```
+
+```{r}
+FeaturePlot(seurat_obj,features = "G1")
+FeaturePlot(seurat_obj,features = "G2M")
+FeaturePlot(seurat_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(seurat_obj,group.by = "phases") + theme(aspect.ratio = 1)
+
+```
+
+
+
+# HARE5
+# Read seurat object
+```{r }
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+seurat_obj <- seurat_obj[,seurat_obj$sample == "XP2"]
+
+```
+
+# Re-Clustering
+```{r }
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj <- SCTransform(seurat_obj, method = "glmGamPoi")
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
+
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:50)
+
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:50)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+
+# UMAP
+```{r}
+DimPlot(seurat_obj,label = TRUE) + theme(aspect.ratio = 1)
+```
+
+# Find markers
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+```
+
+```{r}
+top30_markers <- markers %>%
+  group_by(cluster) %>%
+  top_n(30,avg_log2FC)
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(top30_markers, "../data_output/surat_objects/hare5_top30lfc_markers.csv")
+```
+
+```{r }
+saveRDS(seurat_obj,file = "../data_output/surat_objects/hare5_seurat_obj.Rds")
+```
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/hare5_seurat_obj.Rds")
+
+```
+
+cell cycle
+```{r eval = FALSE}
+set.seed(100)
+
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(as.SingleCellExperiment(seurat_obj), mm.pairs, gene.names=rownames(seurat_obj))
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments_litter2_hare5.rds")
+```
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+
+```{r}
+seurat_obj$G1 <- assignments$normalized.scores$G1
+seurat_obj$S <- assignments$normalized.scores$S
+seurat_obj$G2M <- assignments$normalized.scores$G2M
+seurat_obj$phases <- assignments$phases
+
+```
+
+```{r}
+FeaturePlot(seurat_obj,features = "G1")
+FeaturePlot(seurat_obj,features = "G2M")
+FeaturePlot(seurat_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(seurat_obj,group.by = "phases") + theme(aspect.ratio = 1)
+
+```
+
+
+
+
+# Both datasets, but without integration
+
+```{r }
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+seurat_obj <- seurat_obj[,seurat_obj$sample %in% c("XP2","WT2")]
+
+```
+
+# Re-Clustering
+```{r }
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj <- SCTransform(seurat_obj, method = "glmGamPoi")
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
+
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:50)
+
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:50)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+
+# UMAP
+```{r}
+DimPlot(seurat_obj,label = TRUE) + theme(aspect.ratio = 1)
+```
+```{r}
+DimPlot(seurat_obj,label = TRUE,split.by = "geno") + theme(aspect.ratio = 1)
+
+```
+
+# Find markers
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+```
+
+```{r}
+top30_markers <- markers %>%
+  group_by(cluster) %>%
+  top_n(30,avg_log2FC)
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(top30_markers, "../data_output/surat_objects/litter2_no_integration_top30lfc_markers.csv")
+```
+
+```{r eval = FALSE}
+saveRDS(seurat_obj,file = "../data_output/surat_objects/litter2_no_integration_seurat_obj.Rds")
+```
+
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/litter2_no_integration_seurat_obj.Rds")
+
+```
+
+Cell cycle
+```{r eval = FALSE}
+set.seed(100)
+
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(as.SingleCellExperiment(seurat_obj), mm.pairs, gene.names=rownames(seurat_obj))
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments_litter2_no_integration.rds")
+```
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+
+```{r}
+seurat_obj$G1 <- assignments$normalized.scores$G1
+seurat_obj$S <- assignments$normalized.scores$S
+seurat_obj$G2M <- assignments$normalized.scores$G2M
+seurat_obj$phases <- assignments$phases
+
+```
+
+```{r}
+FeaturePlot(seurat_obj,features = "G1")
+FeaturePlot(seurat_obj,features = "G2M")
+FeaturePlot(seurat_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(seurat_obj,group.by = "phases") + theme(aspect.ratio = 1)
+
+```
+
+Check proportions from each table
+```{r}
+table(seurat_obj@meta.data$seurat_clusters, seurat_obj@meta.data$geno) %>%
+  as.data.frame() %>%
+  ggplot(aes(Var1,Freq, fill = Var2)) +
+  geom_col(position = "dodge")
+```
+
+EdgeR
+```{r}
+library(scater)
+library(edgeR)
+
+abundances <- table(seurat_obj@meta.data$seurat_clusters,seurat_obj@meta.data$sample)
+
+abundances <- unclass(abundances) 
+
+extra_info <- seurat_obj@meta.data[match(colnames(abundances), seurat_obj@meta.data$sample),]
+
+extra_info$geno <- factor(extra_info$geno)
+y_ab <- DGEList(abundances, samples=extra_info)
+
+design <- model.matrix(~ geno, y_ab$samples)
+
+y_ab <- calcNormFactors(y_ab)
+
+fit_ab <- exactTest(y_ab,dispersion = 0.2)
+
+fit_ab$table
+
+```
+```{r}
+tabled_n_by_clust <- table(seurat_obj@meta.data$seurat_clusters,seurat_obj@meta.data$geno)
+relative_tabled_n_by_clust <- tabled_n_by_clust
+relative_tabled_n_by_clust[,"WT"] <- relative_tabled_n_by_clust[,"WT"]/sum(relative_tabled_n_by_clust[,"WT"])
+relative_tabled_n_by_clust[,"XP"] <- relative_tabled_n_by_clust[,"XP"]/sum(relative_tabled_n_by_clust[,"XP"])
+
+as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7)
+
+```
+
+
+```{r}
+as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  filter(seurat_clusters %in% rownames(fit_ab$table[fit_ab$table$logFC > 0.5,])) %>%
+  ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7)
+
+```
+
+
+# Compare markers as a proxy of cluster "similarity"
+```{r}
+markers_wt <- read_csv("../data_output/surat_objects/wt2_top30lfc_markers.csv")
+markers_hare5 <- read_csv("../data_output/surat_objects/hare5_top30lfc_markers.csv")
+markers_litter2 <- read_csv("../data_output/surat_objects/litter2_no_integration_top30lfc_markers.csv")
+
+```
+
+```{r}
+source("../scripts/compare_clusters_jaccard.R")
+```
+
+```{r}
+
+get_cluster_gene_jaccard_df <- function(markers1, markers2){
+  clust_by_clust_df <- expand.grid(unique(markers1$cluster),
+                                   unique(markers2$cluster),stringsAsFactors = FALSE)
+  
+  clust_by_clust_df$ji <- apply(clust_by_clust_df,1,function(x,md1,md2){
+    
+    set_a <- markers1$gene[markers1$cluster==x[1]]
+    set_b <- markers2$gene[markers2$cluster==x[2]]
+    
+    return(get_jaccard(set_a=set_a,set_b=set_b))
+  })
+  return(clust_by_clust_df)
+}
+
+```
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_gene_jaccard_df(markers_wt, markers_hare5)) +
+  xlab("WT") +
+  ylab("HARE5")
+
+```
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_gene_jaccard_df(markers_litter2, markers_wt))+
+  xlab("WT and HARE5") +
+  ylab("WT")
+
+```
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_gene_jaccard_df(markers_litter2, markers_hare5))+
+  xlab("WT and HARE5") +
+  ylab("HARE5")
+
+```
