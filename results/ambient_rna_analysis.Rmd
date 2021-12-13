@@ -1,0 +1,48 @@
+---
+title: "ambient_rna_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Aim
+Get vector of ambient RNA estimation per sample to use for QC during DE analyses.
+
+Sometimes cells get contaminated by RNA from other cells that explode / low quality. This can affect DE between conditions if some cells are contaminated in one condition but not in the other one. 
+https://bioconductor.org/packages/release/bioc/vignettes/DropletUtils/inst/doc/DropletUtils.html
+
+# Get max ambience proportion vector
+```{r}
+
+get_ambient_from_raw10x <- function(.x, .y, genome = "mm10"){
+  sce_object <- DropletUtils::read10xCounts(.x,sample.names = .y,genome = genome)
+ambient <- DropletUtils::ambientProfileEmpty(m = counts(sce_object),good.turing=FALSE, round=FALSE)
+  return(ambient)
+}
+
+
+```
+
+
+```{r}
+
+dirs_10x <- paste0(list.files("../data_raw/run_outs",full.names = T),"/raw_feature_bc_matrix")
+
+names(dirs_10x) <- c("WT1","XP1","WT2","XP2")
+
+ambient_list <- purrr::imap(dirs_10x, get_ambient_from_raw10x)
+```
+
+```{r}
+ambient_matrix <- cbind(ambient_list$WT1,
+                        ambient_list$WT2,
+                        ambient_list$XP1,
+                        ambient_list$XP2)
+```
+
+```{r}
+saveRDS(ambient_matrix,file = "../data_output/osca_objects/ambient_matrix.Rds")
+```
+
