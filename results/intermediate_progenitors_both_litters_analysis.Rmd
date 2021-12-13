@@ -16,18 +16,18 @@ The aim of this analysis is to sub-cluster intermediate progenitors to get a hig
 
 # Preprocessing
 Read seurat object
-```{r}
+```{r eval = FALSE}
 seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
 
 ```
 New cluster assignments
-```{r}
+```{r eval = FALSE}
 DefaultAssay(seurat_obj) <- "integrated"
 seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
 seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
 
 ```
-```{r}
+```{r eval = FALSE}
 library(clusterProfiler)
 library(org.Mm.eg.db)
 DefaultAssay(seurat_obj) <- "RNA"
@@ -41,20 +41,20 @@ FeaturePlot(object = seurat_obj,features = tbr2) +
 VlnPlot(object = seurat_obj, features = tbr2) +
   theme(aspect.ratio = 0.75)
 ```
-```{r}
+```{r eval = FALSE}
 tbr2_clusters <- c("2","8","13","16","17","21")
 ```
 
 # Filtering
 
 Keep cells from clusters annotated as tbr2+ intermediate progenitor neurons.
-```{r}
+```{r eval = FALSE}
 seurat_obj <- seurat_obj[,seurat_obj$seurat_clusters %in% tbr2_clusters]
 ```
 
 
 # Clustering
-```{r}
+```{r eval = FALSE}
 DefaultAssay(seurat_obj) <- "integrated"
 
 seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
@@ -65,9 +65,16 @@ seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
 seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
 
 ```
-```{r}
+```{r eval = FALSE}
 saveRDS(seurat_obj,file = "../data_output/surat_objects/tbr2_both_litters_seurat_obj.Rds")
 ```
+
+
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/tbr2_both_litters_seurat_obj.Rds")
+
+```
+
 
 # Visualizing UMAP
 ```{r}
@@ -91,7 +98,7 @@ plot_cluster_jaccard_matrix(get_cluster_jaccard_df(litter4_metadata, litter2_met
 
 
 # Get markers
-```{r}
+```{r eval = FALSE}
 DefaultAssay(seurat_obj) <- "RNA"
 seurat_obj <- NormalizeData(seurat_obj)
 
@@ -264,7 +271,7 @@ FeaturePlot(seurat_obj,features = "S")
 ```
 
 ```{r}
-DimPlot(seurat_obj,group.by  = "phases")
+DimPlot(seurat_obj,group.by  = "phases", label = T)
 
 ```
 
@@ -296,6 +303,35 @@ de_results <- pseudoBulkDGE(summed,
 ```
 
 ```{r}
+ambient_matrix <- readRDS(file = "../data_output/osca_objects/ambient_matrix.Rds")
+
+```
+
+
+```{r}
+
+  summed <- summed[rownames(summed) %in% rownames(ambient_matrix),]
+  
+  ambient_matrix <- ambient_matrix[rownames(summed), ]
+
+
+maxambients_per_clust <- map(unique(summed$seurat_clusters),function(.x, summed, ambient){
+  current_summed <- summed[,summed$seurat_clusters == .x]
+  
+  current_max_ambient <- ambientContribMaximum(counts(current_summed), 
+                                               ambient_matrix, mode="proportion")
+  
+  
+  
+  currentcontamination <- rowMeans(current_max_ambient, na.rm=TRUE)
+  return(currentcontamination)
+}, summed = summed, ambient = ambient_matrix)
+
+
+names(maxambients_per_clust) <- unique(summed$seurat_clusters)
+```
+
+```{r}
 is_de <- decideTestsPerLabel(de_results, threshold=0.05)
 summarizeTestsPerLabel(is_de)
 
@@ -307,19 +343,25 @@ lognormsummed <- summed
 sizeFactors(lognormsummed) <- NULL
 lognormsummed <- logNormCounts(lognormsummed)
 
-str_length(rownames(de_results$`0`))
 ```
 
 ```{r}
-de_results_df <- do.call(rbind,lapply(names(de_results),
-      function(title,x) {
-        x <- x[[title]]
+library("org.Mm.eg.db")
+
+de_results_df_list <- lapply(names(de_results),
+      function(clust,de_df, ambient_mat) {
+        x <- de_df[[clust]]
+        contamination <- ambient_mat[[clust]]
         x <- as.data.frame(x)
-        x$cluster <- title
-        x <- x %>%
-          rownames_to_column(var = "ENSEMBL")
+        x$cluster <- clust
+        x$contamination <- contamination[rownames(x)]
+        x <-rownames_to_column(x,var = "ENSEMBL")
+        
         return(x)
-      }, x = de_results))
+      }, de_df = de_results, ambient_mat = maxambients_per_clust)
+
+
+de_results_df <- do.call(rbind,de_results_df_list)
 
 ens2symbol <- clusterProfiler::bitr(de_results_df$ENSEMBL,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
 
@@ -329,7 +371,7 @@ de_results_df <- drop_na(de_results_df)
 
 ```{r}
 de_results_df %>%
-  ggplot(aes(logCPM, logFC, color = FDR < 0.05)) +
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & contamination < 0.1)) +
   geom_point(size = 0.5, pch = 1) +
   scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
   theme_light() +
@@ -337,7 +379,7 @@ de_results_df %>%
   facet_wrap(~cluster) +
   ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
                            data = de_results_df %>%
-                             filter(FDR < 0.05),
+                             filter(FDR < 0.05 & contamination < 0.1),
                            color = "black",
                            max.overlaps = 30,
                            size = 3) 
