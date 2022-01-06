@@ -341,11 +341,66 @@ From these analyses it seems clear that there is an increase in cycling intermed
 - By doing these, there are some differentially expressed genes in the intermediate progenitors, but the fact that some DEs are hemoglobins, changing in both directions in different clusters makes me think of problems with ambient RNA (?). So I decided to follow the ambient RNA tutorial from OSCA: http://bioconductor.org/books/3.13/OSCA.multisample/ambient-problems.html.
 
 # 2021-12-09
-- Check remove ambience problems to re-do DE
-- Re-do DE and DA with better clusters for 4 litter samples
-- Cluster separately each assay
+- Check remove ambient rna problems to re-do DE
+Ambient rna estimations in results/ambient_rna_analysis.Rmd
+Turns out some DEs were actually high proportion ambient rna, but not all!
+
+# 2021-12-10
 - So run without integration -> litter2 wt, litter2 xp, litter2 
+- Cluster separately each assay.
+These are in results/separate_clustering.Rmd
+
+# 2021-12-13
+- Send updates to Jing.
+- Did the same separate clustering for tbr2+ cells.
+
+
+Other big things for the week:
+- Organize directory.
+- Make presentation.
+- Clean hardac directoroy.
+
+- Re-do DE and DA with better clusters for 4 litter samples
 - Run litter1 with integration
 
+# 2021-12-14
+- Put together all plots for presentation.
+- Did the DE plots filtering for contamination. 
+- This was also useful for qc https://www.bioinformatics.babraham.ac.uk/training/10XRNASeq/R%20packages%20for%20SCRNA.pdf
 
+# 2021-12-15
+- Went over the milo paper:  https://marionilab.github.io/miloR/articles/milo_demo.html
+
+# 2021-12-16
+- Go over milo tutorial. 
+- Milo data analysis.
+- Try milo https://marionilab.github.io/miloR/articles/milo_demo.html
+
+For later:
+- Check the differentially expressed genes / come up with a new list for the other clusters.
+- Try the MDS plots etc from the other pipeline for differential state.
+
+# 2021-12-17
+- Meeting with Jing & Debbie.
+- To send over:
+- Slides with new plots.
+
+- DE results (contaminant filtered)
+- Tbr2+ with replicates
+- Tbr2+ without replicates
+- Full with replicates
+- Full without replicates
+
+- Full markers 
+- Tbr2+ with replicates
+- Tbr2+ without replicates
+- Full with replicates
+- Full without replicates
+
+# 2022-01-05
+- Prepared files and sent to Jing. 
+- Organize files.
+
+# 2022-01-06
+- Prepare presentation.
 

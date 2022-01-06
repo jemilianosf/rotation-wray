@@ -78,7 +78,7 @@ seurat_obj <- readRDS(file = "../data_output/surat_objects/tbr2_both_litters_seu
 
 # Visualizing UMAP
 ```{r}
-DimPlot(seurat_obj, label = TRUE)
+DimPlot(seurat_obj, label = TRUE, split.by = "geno") + theme(aspect.ratio = 1)
 ```
 
 ```{r}
@@ -92,7 +92,9 @@ source("../scripts/compare_clusters_jaccard.R")
 litter4_metadata <- seurat_obj@meta.data
 litter2_metadata <- readRDS(file = "../data_output/surat_objects/tbr2_litter2_seurat_obj.Rds")@meta.data
 
-plot_cluster_jaccard_matrix(get_cluster_jaccard_df(litter4_metadata, litter2_metadata)) + xlab("All All samples") + ylab("Litter 2")
+litter4_metadata <- litter4_metadata[litter4_metadata$orig.ident %in% c("WT2","XP2"),]
+
+plot_cluster_jaccard_matrix(get_cluster_jaccard_df(litter4_metadata, litter2_metadata)) + xlab("All samples") + ylab("Litter 2")
 
 ```
 
@@ -111,6 +113,7 @@ seurat_obj_conserved_markers_list_df <- do.call(rbind,imap(seurat_obj_conserved_
   .x$cluster <- .y
   return(.x)
 }))
+saveRDS(seurat_obj_conserved_markers_list_df, "../data_output/surat_objects/tbr2_both_litters_conserved_markers_list_df.rds")
 
 top30_markers <- seurat_obj_conserved_markers_list_df %>%
   group_by(cluster) %>%
@@ -189,7 +192,8 @@ as.data.frame(relative_tabled_n_by_clust) %>%
          geno = Var2) %>%
   ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
   geom_col(position = "dodge") +
-  scale_fill_brewer(type = "qual",palette = 7)
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
 
 ```
 
@@ -231,7 +235,9 @@ as.data.frame(relative_tabled_n_by_clust) %>%
   filter(seurat_clusters %in% rownames(res$table[res$table$logFC > 0.5,])) %>%
   ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
   geom_col(position = "dodge") +
-  scale_fill_brewer(type = "qual",palette = 7)
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal() +
+  theme(aspect.ratio = 1)
 
 ```
 
@@ -256,6 +262,8 @@ plot(assignments$score$G1, assignments$score$G2M,
 ```
 
 ```{r}
+assignments <- readRDS("../data_output/osca_objects/cellcycle_assignments_tbr2_all_litters.rds")
+
 seurat_obj$G1 <- assignments$normalized.scores$G1
 seurat_obj$S <- assignments$normalized.scores$S
 seurat_obj$G2M <- assignments$normalized.scores$G2M
@@ -271,7 +279,7 @@ FeaturePlot(seurat_obj,features = "S")
 ```
 
 ```{r}
-DimPlot(seurat_obj,group.by  = "phases", label = T)
+DimPlot(seurat_obj,group.by  = "phases") + theme(aspect.ratio = 1)
 
 ```
 
@@ -370,8 +378,19 @@ de_results_df <- drop_na(de_results_df)
 ```
 
 ```{r}
+de_results_df_filt <- de_results_df[de_results_df$FDR < 0.05 & de_results_df$contamination < 0.05,]
+```
+```{r}
+write.csv(de_results_df,file = "../data_output/surat_objects/tbr2_clusters_deg_all.csv")
+```
+
+```{r}
+write.csv(de_results_df_filt,file = "../data_output/surat_objects/tbr2_clusters_deg_fdr05_contamination_05.csv")
+```
+
+```{r}
 de_results_df %>%
-  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & contamination < 0.1)) +
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & contamination < 0.05)) +
   geom_point(size = 0.5, pch = 1) +
   scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
   theme_light() +
@@ -379,7 +398,7 @@ de_results_df %>%
   facet_wrap(~cluster) +
   ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
                            data = de_results_df %>%
-                             filter(FDR < 0.05 & contamination < 0.1),
+                             filter(FDR < 0.05 & contamination < 0.05),
                            color = "black",
                            max.overlaps = 30,
                            size = 3) 
@@ -402,7 +421,7 @@ wnt_pathway_genes <- clusterProfiler::bitr(wnt_pathway_entrez_genes$to,OrgDb = o
 
 ```{r}
 de_results_df %>%
-  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL )) +
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 &contamination < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL )) +
   geom_point(size = 0.5, pch = 1) +
   scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
   theme_light() +
@@ -410,7 +429,7 @@ de_results_df %>%
   facet_wrap(~cluster) +
   ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
                            data = de_results_df %>%
-                             filter(FDR < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL),
+                             filter(FDR < 0.05 & contamination < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL),
                            color = "black",
                            max.overlaps = 30,
                            size = 3) 

@@ -79,6 +79,9 @@ seurat_obj_conserved_markers_list_df <- do.call(rbind,imap(seurat_obj_conserved_
   return(.x)
 }))
 
+
+saveRDS(seurat_obj_conserved_markers_list_df, "../data_output/surat_objects/tbr2_litter2_conserved_markers_list_df.rds")
+
 top30_markers <- seurat_obj_conserved_markers_list_df %>%
   group_by(cluster) %>%
   top_n(30,XP_avg_log2FC)
@@ -141,11 +144,12 @@ VlnPlot(object = seurat_obj, features = "malat_percent") +
 ```
 
 ```{r}
-seurat_obj@meta.data %>%
+counts_plot <- seurat_obj@meta.data %>%
   as_data_frame() %>%
   ggplot(aes(seurat_clusters, fill =  geno)) +
   geom_bar(position = "dodge") +
-  scale_fill_brewer(type = "qual",palette = 7)
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
 
 ```
 
@@ -155,14 +159,21 @@ relative_tabled_n_by_clust <- tabled_n_by_clust
 relative_tabled_n_by_clust[,"WT"] <- relative_tabled_n_by_clust[,"WT"]/sum(relative_tabled_n_by_clust[,"WT"])
 relative_tabled_n_by_clust[,"XP"] <- relative_tabled_n_by_clust[,"XP"]/sum(relative_tabled_n_by_clust[,"XP"])
 
-as.data.frame(relative_tabled_n_by_clust) %>%
+proportions_plot <- as.data.frame(relative_tabled_n_by_clust) %>%
   mutate(seurat_clusters = Var1,
          geno = Var2) %>%
   ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
   geom_col(position = "dodge") +
-  scale_fill_brewer(type = "qual",palette = 7)
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal() +
+  ylab("Proportion")
 
 ```
+
+```{r}
+counts_plot / proportions_plot + patchwork::plot_layout(guides = "collect")
+```
+
 
 EdgeR
 ```{r}
@@ -192,15 +203,34 @@ fit_ab$table
 
 ```{r}
 
-as.data.frame(relative_tabled_n_by_clust) %>%
+hare5_plot <- as.data.frame(relative_tabled_n_by_clust) %>%
   mutate(seurat_clusters = Var1,
          geno = Var2) %>%
   filter(seurat_clusters %in% rownames(fit_ab$table[fit_ab$table$logFC > 0.5,])) %>%
   ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
   geom_col(position = "dodge") +
-  scale_fill_brewer(type = "qual",palette = 7)
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
 
 ```
+
+```{r}
+
+wt_plot <- as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  filter(seurat_clusters %in% rownames(fit_ab$table[fit_ab$table$logFC < - 0.5,])) %>%
+  ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
+
+```
+```{r}
+hare5_plot + theme(aspect.ratio = 1) + ylab("Proportion")
+```
+
+
 ```{r}
 tabled_n_by_clust
 cycling <- c("4","9","11")
@@ -219,7 +249,7 @@ tabled_n_by_clust_aggregated_relative
 ```
 ```{r}
 
-as.data.frame(tabled_n_by_clust_aggregated_relative) %>%
+prop_plot <- as.data.frame(tabled_n_by_clust_aggregated_relative) %>%
   rownames_to_column("seurat_clusters") %>%
   pivot_longer(cols = c(WT,XP),names_to = "geno",values_to = "Proportion") %>%
   ggplot(aes(seurat_clusters,Proportion, fill =  geno)) +
@@ -227,7 +257,7 @@ as.data.frame(tabled_n_by_clust_aggregated_relative) %>%
   scale_fill_brewer(type = "qual",palette = 7) +
   theme(aspect.ratio = 1)
 
-as.data.frame(tabled_n_by_clust_aggregated) %>%
+counts_plot <- as.data.frame(tabled_n_by_clust_aggregated) %>%
   rownames_to_column("seurat_clusters") %>%
   pivot_longer(cols = c(WT,XP),names_to = "geno",values_to = "Counts") %>%
   ggplot(aes(seurat_clusters,Counts, fill =  geno)) +
@@ -235,7 +265,32 @@ as.data.frame(tabled_n_by_clust_aggregated) %>%
   scale_fill_brewer(type = "qual",palette = 7) +
   theme(aspect.ratio = 1) 
 
+
+
 ```
+
+
+```{r}
+((counts_plot | prop_plot) & theme_minimal()) + patchwork::plot_layout(guides = "collect")
+
+```
+
+
+```{r}
+fit_ab$table %>%
+  rownames_to_column(var ="clusters") %>%
+  mutate(big_cluster = case_when(clusters %in% neurogenic ~ "neurogenic",
+                                 clusters %in% cycling ~ "cycling",
+                                 clusters %in% progenitors ~ "progenitors")) %>%
+  ggplot(aes(big_cluster, logFC)) +
+  geom_boxplot() +
+  geom_jitter() +
+  theme_light() +
+  theme(aspect.ratio = 1)
+   
+```
+
+
 ##
 ```{r}
 library(scater)
@@ -280,6 +335,9 @@ plot(assignments$score$G1, assignments$score$G2M,
 ```
 
 ```{r}
+assignments<- readRDS("../data_output/osca_objects/cellcycle_assignments_litter2_tbr2.rds")
+
+
 seurat_obj$G1 <- assignments$normalized.scores$G1
 seurat_obj$S <- assignments$normalized.scores$S
 seurat_obj$G2M <- assignments$normalized.scores$G2M
@@ -295,7 +353,7 @@ FeaturePlot(seurat_obj,features = "S")
 ```
 
 ```{r}
-DimPlot(seurat_obj,group.by = "phases") + theme(aspect.ratio = 1)
+DimPlot(seurat_obj,group.by = "phases",split.by = "geno") + theme(aspect.ratio = 1)
 
 ```
 
@@ -343,6 +401,51 @@ names(de_per_clust) <- unique(summed$seurat_clusters)
 ```
 
 ```{r}
+ambient_matrix <- readRDS(file = "../data_output/osca_objects/ambient_matrix.Rds")
+ambient_matrix <- ambient_matrix[,c(2,4)]
+  summed <- summed[rownames(summed) %in% rownames(ambient_matrix),]
+  
+  ambient_matrix <- ambient_matrix[rownames(summed), ]
+
+library(DropletUtils)
+maxambients_per_clust <- map(unique(summed$seurat_clusters),function(.x, summed, ambient){
+  current_summed <- summed[,summed$seurat_clusters == .x]
+  
+  current_max_ambient <- ambientContribMaximum(counts(current_summed), 
+                                               ambient_matrix, mode="proportion")
+  
+  
+  
+  currentcontamination <- rowMeans(current_max_ambient, na.rm=TRUE)
+  return(currentcontamination)
+}, summed = summed, ambient = ambient_matrix)
+
+
+names(maxambients_per_clust) <- unique(summed$seurat_clusters)
+
+de_results_df_list <- lapply(names(de_per_clust),
+      function(clust,de_df, ambient_mat) {
+        x <- de_df[[clust]]
+        contamination <- ambient_mat[[clust]]
+        x <- as.data.frame(x)
+        x$cluster <- clust
+        x$contamination <- contamination[rownames(x)]
+        x <-rownames_to_column(x,var = "ENSEMBL")
+        
+        return(x)
+      }, de_df = de_per_clust, ambient_mat = maxambients_per_clust)
+
+de_results_df <- do.call(rbind,de_results_df_list)
+
+ens2symbol <- clusterProfiler::bitr(de_results_df$ENSEMBL,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+de_results_df <- left_join(de_results_df, ens2symbol,by= "ENSEMBL")
+de_results_df <- drop_na(de_results_df)
+
+```
+
+
+```{r}
 lognormsummed <- summed
 sizeFactors(lognormsummed) <- NULL
 lognormsummed <- logNormCounts(lognormsummed)
@@ -384,6 +487,22 @@ de_results_df %>%
 
 ```
 
+```{r}
+de_results_df %>%
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & contamination < 0.05)) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  theme_light() +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~cluster) +
+  ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
+                           data = de_results_df %>%
+                             filter(FDR < 0.05 & contamination < 0.05),
+                           color = "black",
+                           max.overlaps = 30,
+                           size = 3) 
+
+```
 
 ```{r}
 DefaultAssay(seurat_obj) <- "RNA"

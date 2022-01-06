@@ -116,12 +116,103 @@ death_ensembl <- bitr(c("Trp53", "Bax", "Bcl2","Malat1"),fromType = "SYMBOL",toT
 ```
 
 
+
 ```{r}
-FeaturePlot(seurat_obj, features = bitr(c("Trp53", "Bax", "Bcl2","Malat1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL,split.by = "sample") +
-  scale_color_viridis_c()
+
+
+death_genes_ens <- bitr(c("Trp53", "Bax", "Bcl2"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+names(death_genes_ens) <- c("Trp53", "Bax", "Bcl2")
+
+seurat_obj$Trp53 <- seurat_obj@assays$RNA@data[death_genes_ens["Trp53"],]
+seurat_obj$Bax <- seurat_obj@assays$RNA@data[death_genes_ens["Bax"],]
+seurat_obj$Bcl2 <- seurat_obj@assays$RNA@data[death_genes_ens["Bcl2"],]
+
+
+
+FeaturePlot(seurat_obj, features = names(death_genes_ens),split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right") 
 
 
 ```
+
+```{r}
+
+
+caspases_ens <- bitr(c("Casp7", "Casp3", "Casp1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+names(caspases_ens) <- c("Casp7", "Casp3", "Casp1")
+
+seurat_obj$Casp7 <- seurat_obj@assays$RNA@data[caspases_ens["Casp7"],]
+seurat_obj$Casp3 <- seurat_obj@assays$RNA@data[caspases_ens["Casp3"],]
+seurat_obj$Casp1 <- seurat_obj@assays$RNA@data[caspases_ens["Casp1"],]
+
+
+
+FeaturePlot(seurat_obj, features = names(caspases_ens),split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right") 
+
+
+```
+
+```{r}
+membrane_ens <- bitr(c("Ms4a3", "Il7r", "C3"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+names(membrane_ens) <- c("Ms4a3", "Il7r", "C3")
+
+
+seurat_obj$Il7r <- seurat_obj@assays$RNA@data[membrane_ens["Il7r"],]
+seurat_obj$C3 <- seurat_obj@assays$RNA@data[membrane_ens["C3"],]
+
+
+
+FeaturePlot(seurat_obj, features = names(membrane_ens),split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right") 
+
+```
+
+
+# Stress
+
+```{r}
+stress_ensembl_df <- bitr(c("Jun","Fos","B2m","ler2","Dusp1","Ddx5","Kap","Junb","Jund","Blg1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)
+
+stress_ensembl <- stress_ensembl_df$ENSEMBL
+names(stress_ensembl) <- stress_ensembl_df$SYMBOL
+
+ stress_ensembl <- stress_ensembl[! stress_ensembl %in% "ENSMUSG00000032758"]
+```
+
+```{r}
+FeaturePlot(seurat_obj, features = stress_ensembl[1:4],split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right", aspect.ratio = 1)
+
+```
+
+```{r}
+FeaturePlot(seurat_obj, features = stress_ensembl[5:7],split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right", aspect.ratio = 1)
+
+```
+
+# Malat
+
+```{r}
+malat1_ens <- bitr(c("Malat1"),fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+
+seurat_obj$Malat1 <- seurat_obj@assays$RNA@data[malat1_ens,]
+
+```
+
+```{r}
+FeaturePlot(seurat_obj, features = "Malat1",split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right", aspect.ratio = 1) 
+
+```
+
 ```{r}
 FeaturePlot(seurat_obj, features = death_ensembl[4],split.by = "sample") &
   scale_color_viridis_c()
@@ -133,7 +224,7 @@ FeaturePlot(seurat_obj, features = "percent.mt",split.by = "sample") &
 
 
 ```{r}
-VlnPlot(seurat_obj, features = death_ensembl[3],split.by = "sample")
+VlnPlot(seurat_obj, features = "Malat1",split.by = "sample")
 
 ```
 
@@ -146,7 +237,7 @@ VlnPlot(seurat_obj, features = "ENSMUSG00000048758",split.by = "sample")
 Idents(seurat_obj) <- "seurat_clusters"
 VlnPlot(seurat_obj, features ="nFeature_RNA",split.by = "sample",idents = "5")
 VlnPlot(seurat_obj, features ="nCount_RNA",split.by = "sample",idents =batch_biased_clusters_top5$cluster)
-seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = death_ensembl[4])
+seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = malat1_ens)
 ```
 
 
@@ -156,8 +247,18 @@ Idents(seurat_obj) <- "sample"
 VlnPlot(seurat_obj, features = "ENSMUSG00000048758")
 VlnPlot(seurat_obj, features = "ENSMUSG00000092341")
 VlnPlot(seurat_obj, features = death_ensembl[4])
-VlnPlot(seurat_obj, features = "percent.malat1")
 
+
+
+```
+
+```{r}
+VlnPlot(seurat_obj, features = "percent.malat1",pt.size = 0,sort = "increasing") + theme(legend.position = "none")
+```
+```{r}
+FeaturePlot(seurat_obj, features = "percent.malat1",split.by = "sample") &
+  scale_color_viridis_c() &
+  theme(legend.position = "right", aspect.ratio = 1)
 
 ```
 
@@ -174,7 +275,8 @@ VlnPlot(seurat_obj, features = xist_ensembl)
 seurat_obj$malat_filt <- seurat_obj$percent.malat1 > 5
 FeaturePlot(seurat_obj, features = "percent.malat1",split.by = "sample") &
   scale_color_viridis_c()
-DimPlot(seurat_obj ,group.by = "malat_filt",split.by = "sample")
+DimPlot(seurat_obj ,group.by = "malat_filt",split.by = "sample",cols = c("gray","blue")) +
+  theme(aspect.ratio = 1)
 
 ```
 
@@ -196,6 +298,7 @@ names(metadata_downsampled_list) <- stringr::str_remove(stringr::str_remove(tool
 
 
 ```{r}
+metadata_downsampled_list$mito <- metadata_downsampled_list$mito[metadata_downsampled_list$mito$orig.ident %in% c("WT2","XP2"),]
 
 plot_cluster_jaccard_matrix(get_cluster_jaccard_df(metadata_downsampled_list$mito, metadata_downsampled_list$subset_mito)) + xlab("Four samples") + ylab("Two samples")
 

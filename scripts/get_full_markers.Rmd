@@ -1,0 +1,92 @@
+---
+title: "get_full_markers"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Get cvs files for dec 17 meeting results
+
+
+# Get full markers
+
+- Full markers 
+- Tbr2+ with replicates
+```{r}
+tbr2_bothreplicates <- readRDS( "../data_output/surat_objects/tbr2_both_litters_conserved_markers_list_df.rds")
+
+```
+
+- Tbr2+ without replicates
+```{r}
+tbr2_litter2 <- readRDS( "../data_output/surat_objects/tbr2_litter2_conserved_markers_list_df.rds")
+
+```
+- Full with replicates
+```{r}
+full_bothreplicates <- readRDS( "../data_output/surat_objects/integrated_mitoremoved_conserved_markers_df.rds")
+
+```
+- Full without replicates
+```{r}
+full_litter2 <- readRDS( "../data_output/surat_objects/litter2_conserved_markers_list_df.rds")
+
+```
+
+
+
+Add gene names
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+join_gene_symbols <- function(df){
+  symbol_map <- bitr(df$ensembl,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+  
+  symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+  
+  df <- left_join(df,symbol_map, by =c("ensembl" = "ENSEMBL"))
+  return(df)
+}
+
+markers_join_list <- map(list(full_bothreplicates,full_litter2,tbr2_bothreplicates,tbr2_litter2)
+, join_gene_symbols)
+
+names(markers_join_list) <- c("full_bothreplicates","full_litter2","tbr2_bothreplicates","tbr2_litter2")
+```
+
+Sort by fold change by group
+```{r}
+sort_by_foldchange_by_group <- function(df) {
+  df <- df %>%
+    group_by(cluster) %>% 
+    dplyr::arrange(desc(XP_avg_log2FC),.by_group = TRUE) 
+  return(df)
+}
+markers_join_list <- map(markers_join_list, sort_by_foldchange_by_group)
+
+```
+
+Save to csv
+```{r}
+
+
+names(markers_join_list) <- paste0("../data_output/surat_objects/",names(markers_join_list), "_conserved_markers.csv")
+
+
+iwalk(markers_join_list,~write.csv(.x,.y))
+```
+
+
+# Get DE results
+
+- DE results (contaminant filtered)
+- Tbr2+ with replicates
+
+- Full with replicates
+```{r}
+"../data_output/surat_objects/all_clusters_deg_fdr05_contamination_05.csv"
+```
+

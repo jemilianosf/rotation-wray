@@ -1,0 +1,178 @@
+---
+title: "check_litter1_no_integration"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+```
+
+
+Read seurat object. 
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+seurat_obj <- seurat_obj[,seurat_obj$orig.ident %in% c("WT1","XP1")]
+```
+
+Filter malat1 cells
+```{r}
+malat_ensembl <- bitr("Malat1",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = malat_ensembl)
+
+seurat_obj <- seurat_obj[,seurat_obj$percent.malat1 < 5]
+
+
+```
+
+
+
+```{r}
+
+
+seurat_obj <- SCTransform(seurat_obj, method = "glmGamPoi")
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
+
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:50)
+
+```
+
+```{r}
+DimPlot(seurat_obj, group.by = "geno") + theme(aspect.ratio = 1)
+```
+
+
+```{r }
+saveRDS(seurat_obj,"../data_output/surat_objects/run_8nov21/mito_malat_filt_no_integration_litter1.rds")
+```
+
+```{r}
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:50)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+
+```{r}
+DimPlot(seurat_obj,label = TRUE) + theme(aspect.ratio = 1)
+DimPlot(seurat_obj,label = TRUE,split.by = "geno") + theme(aspect.ratio = 1)
+
+```
+
+
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+```
+
+```{r}
+top30_markers <- markers %>%
+  group_by(cluster) %>%
+  top_n(30,avg_log2FC)
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(top30_markers, "../data_output/surat_objects/litter1_no_integration_top30lfc_markers.csv")
+```
+
+
+Cell cycle
+```{r }
+set.seed(100)
+
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(as.SingleCellExperiment(seurat_obj), mm.pairs, gene.names=rownames(seurat_obj))
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments_litter1_no_integration.rds")
+```
+
+
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+
+
+```{r}
+seurat_obj$G1 <- assignments$normalized.scores$G1
+seurat_obj$S <- assignments$normalized.scores$S
+seurat_obj$G2M <- assignments$normalized.scores$G2M
+seurat_obj$phases <- assignments$phases
+
+```
+
+```{r}
+FeaturePlot(seurat_obj,features = "G1")
+FeaturePlot(seurat_obj,features = "G2M")
+FeaturePlot(seurat_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(seurat_obj,group.by = "phases") + theme(aspect.ratio = 1)
+
+```
+
+
+# Compare markers as a proxy of cluster "similarity"
+
+```{r}
+source("../scripts/compare_clusters_jaccard.R")
+```
+
+```{r}
+
+markers_wt <- read_csv("../data_output/surat_objects/wt2_top30lfc_markers.csv")
+markers_hare5 <- read_csv("../data_output/surat_objects/hare5_top30lfc_markers.csv")
+markers_litter2 <- read_csv("../data_output/surat_objects/litter2_no_integration_top30lfc_markers.csv")
+markers_litter1 <- read_csv("../data_output/surat_objects/litter1_no_integration_top30lfc_markers.csv")
+
+```
+
+
+```{r}
+
+get_cluster_gene_jaccard_df <- function(markers1, markers2){
+  clust_by_clust_df <- expand.grid(unique(markers1$cluster),
+                                   unique(markers2$cluster),stringsAsFactors = FALSE)
+  
+  clust_by_clust_df$ji <- apply(clust_by_clust_df,1,function(x,md1,md2){
+    
+    set_a <- markers1$gene[markers1$cluster==x[1]]
+    set_b <- markers2$gene[markers2$cluster==x[2]]
+    
+    return(get_jaccard(set_a=set_a,set_b=set_b))
+  })
+  return(clust_by_clust_df)
+}
+
+```
+
+```{r}
+plot_cluster_jaccard_matrix(get_cluster_gene_jaccard_df(markers_litter1, markers_litter2)) +
+  xlab("litter1") +
+  ylab("litter2")
+
+```

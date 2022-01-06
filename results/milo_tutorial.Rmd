@@ -1,0 +1,204 @@
+---
+title: "milo_tutorial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Aim
+
+Milo detects changes in composition from different experiments, with replication.
+
+# Overview
+
+The point is to not aggregate cells into discrete clusters, but rather dectect changes in composition more generally.
+
+There are some problems with aggregating cells into discrete clusters and then calculating DA.
+
+- It builds a kNN graph.
+-
+
+# Libraries
+```{r}
+library(miloR)
+library(SingleCellExperiment)
+library(scater)
+library(dplyr)
+library(patchwork)
+
+```
+
+
+# Load test data
+```{r}
+data("sim_trajectory", package = "miloR")
+
+## Extract SingleCellExperiment object
+traj_sce <- sim_trajectory[['SCE']]
+
+## Extract sample metadata to use for testing
+traj_meta <- sim_trajectory[["meta"]]
+
+## Add metadata to colData slot
+colData(traj_sce) <- DataFrame(traj_meta)
+
+```
+
+# Pre-processing
+
+
+Build kNN graph from PCA distances.
+
+First, do PCA. 
+
+And UMAP for visualization.
+
+```{r}
+logcounts(traj_sce) <- log(counts(traj_sce) + 1)
+traj_sce <- runPCA(traj_sce, ncomponents=30)
+traj_sce <- runUMAP(traj_sce)
+
+plotUMAP(traj_sce)
+
+```
+
+Build 
+```{r}
+traj_milo <- Milo(traj_sce)
+reducedDim(traj_milo, "UMAP") <- reducedDim(traj_sce, "UMAP")
+
+```
+
+```{r}
+traj_milo <- buildGraph(traj_milo, k = 10, d = 30)
+
+```
+
+Make neighbourhoods
+
+```{r}
+traj_milo <- makeNhoods(traj_milo, prop = 0.1, k = 10, d=30, refined = TRUE)
+
+```
+
+How big are the neighbourhoods?
+```{r}
+plotNhoodSizeHist(traj_milo)
+
+```
+
+Count cells per neighbourhood
+
+```{r}
+traj_milo <- countCells(traj_milo, meta.data = data.frame(colData(traj_milo)), sample="Sample")
+```
+
+```{r}
+head(nhoodCounts(traj_milo))
+
+traj_design <- data.frame(colData(traj_milo))[,c("Sample", "Condition")]
+traj_design <- distinct(traj_design)
+
+
+rownames(traj_design) <- colnames(traj_milo@nhoodCounts)
+```
+
+
+```{r}
+traj_milo <- calcNhoodDistance(traj_milo, d=30)
+
+```
+
+```{r}
+da_results <- testNhoods(traj_milo, design = ~ Condition, design.df = traj_design)
+
+traj_milo
+```
+
+```{r}
+da_results %>%
+  arrange(- SpatialFDR) %>%
+  head()
+
+```
+```{r}
+traj_milo <- buildNhoodGraph(traj_milo)
+
+```
+```{r}
+plotUMAP(traj_milo) + plotNhoodGraphDA(traj_milo, da_results, alpha=0.05) +
+  plot_layout(guides="collect")
+
+```
+
+# Mouse gastrulation
+
+```{r}
+library(miloR)
+library(SingleCellExperiment)
+library(scater)
+library(scran)
+library(dplyr)
+library(patchwork)
+library(MouseGastrulationData)
+
+```
+
+```{r}
+select_samples <- c(2,  3,  6, 4, #15,
+                    # 19, 
+                    10, 14#, 20 #30
+                    #31, 32
+                    )
+embryo_data = EmbryoAtlasData(samples = select_samples)
+embryo_data
+
+```
+
+
+```{r}
+embryo_data <- embryo_data[,apply(reducedDim(embryo_data, "pca.corrected"), 1, function(x) !all(is.na(x)))]
+embryo_data <- runUMAP(embryo_data, dimred = "pca.corrected", name = 'umap')
+
+plotReducedDim(embryo_data, colour_by="stage", dimred = "umap") 
+
+```
+
+```{r}
+embryo_milo <- Milo(embryo_data)
+embryo_milo <- buildGraph(embryo_milo, k = 30, d = 30, reduced.dim = "pca.corrected")
+embryo_milo <- makeNhoods(embryo_milo, prop = 0.1, k = 30, d=30, refined = TRUE, reduced_dims = "pca.corrected")
+plotNhoodSizeHist(embryo_milo)
+embryo_milo <- countCells(embryo_milo, meta.data = as.data.frame(colData(embryo_milo)), sample="sample")
+
+embryo_design <- data.frame(colData(embryo_milo))[,c("sample", "stage", "sequencing.batch")]
+
+## Convert batch info from integer to factor
+embryo_design$sequencing.batch <- as.factor(embryo_design$sequencing.batch) 
+embryo_design <- distinct(embryo_design)
+rownames(embryo_design) <- embryo_design$sample
+
+embryo_milo <- calcNhoodDistance(embryo_milo, d=30, reduced.dim = "pca.corrected")
+
+da_results <- testNhoods(embryo_milo, design = ~ sequencing.batch + stage, design.df = embryo_design, reduced.dim="pca.corrected")
+
+head(da_results)
+
+```
+
+```{r}
+da_results %>%
+  arrange(SpatialFDR) %>%
+  head() 
+
+```
+Inspecting results
+
+```{r}
+ggplot(da_results, aes(PValue)) + geom_histogram(bins=50)
+
+```
+
+

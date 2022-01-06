@@ -1,0 +1,144 @@
+---
+title: "milo_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(miloR)
+library(SingleCellExperiment)
+library(scater)
+library(dplyr)
+library(patchwork)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(Seurat)
+
+```
+
+# Test for differential abundance
+
+# Aim
+
+Milo detects changes in composition from different experiments, with replication and complex designs (like batch and experimental conditions).
+
+
+## Step 1: Build Milo object from seurat object with four samples
+
+Read seurat object. 
+```{r}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+```
+
+Filter malat1 cells
+```{r}
+malat_ensembl <- bitr("Malat1",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj$percent.malat1 <- PercentageFeatureSet(seurat_obj,features = malat_ensembl)
+
+seurat_obj <- seurat_obj[,seurat_obj$percent.malat1 < 5]
+
+
+```
+
+```{r}
+DefaultAssay(seurat_obj) <- "integrated"
+
+seurat_obj <- RunPCA(seurat_obj,npcs = 100)
+seurat_obj <- RunUMAP(seurat_obj,dims = 1:50)
+
+```
+
+
+Build Milo object
+
+```{r}
+sce_obj <- as.SingleCellExperiment(seurat_obj)
+
+milo_obj <- Milo(sce_obj)
+```
+
+## Step 2: Build kNN graph from integrated PCA space
+
+```{r}
+milo_obj <- buildGraph(milo_obj, k = 30, d = 50, reduced.dim = "PCA")
+
+```
+
+## Step 3: Get representative neighbourhoods
+
+```{r}
+milo_obj <- makeNhoods(milo_obj, prop = 0.1, k = 30, d = 50, refined = TRUE, reduced_dims = "PCA")
+
+```
+
+```{r}
+plotNhoodSizeHist(milo_obj)
+```
+## Step 4: Count number of cells per neighbourhood per condition
+
+```{r}
+milo_obj <- countCells(milo_obj, meta.data = as.data.frame(colData(milo_obj)), sample="sample")
+
+```
+
+## Step 5: Build design matrix 
+
+```{r}
+design <- data.frame(colData(milo_obj))[,c("sample", "geno")]
+
+design <- design %>%
+  mutate(batch = as.factor(substr(sample,3,3))) 
+
+design <- distinct(design)
+
+rownames(design) <- design$sample
+
+```
+
+## Step 6: Computing neighbourhood connectivity
+```{r}
+milo_obj <- calcNhoodDistance(milo_obj, d=50, reduced.dim = "PCA")
+
+
+```
+
+```{r}
+da_results <- testNhoods(milo_obj, design = ~ batch + geno, design.df = design, reduced.dim="PCA")
+
+```
+
+```{r}
+da_results %>%
+  arrange(SpatialFDR) %>%
+  head() 
+
+```
+```{r}
+ggplot(da_results, aes(PValue)) + geom_histogram(bins=50)
+
+```
+```{r}
+ggplot(da_results, aes(logFC, -log10(SpatialFDR))) + 
+  geom_point() +
+  geom_hline(yintercept = 1) ## Mark significance threshold (10% FDR)
+
+```
+```{r}
+milo_obj <- buildNhoodGraph(milo_obj)
+
+## Plot single-cell UMAP
+umap_pl <- plotReducedDim(milo_obj, dimred = "UMAP", colour_by="geno") +
+  guides(fill="none")
+
+## Plot neighbourhood graph
+nh_graph_pl <- plotNhoodGraphDA(milo_obj, da_results, layout="UMAP",alpha=0.1) 
+  
+umap_pl + nh_graph_pl +
+  plot_layout(guides="collect")
+
+```
+

@@ -247,6 +247,12 @@ seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
 ```{r}
 DimPlot(seurat_obj,label = TRUE) + theme(aspect.ratio = 1)
 ```
+
+```{r}
+DimPlot(seurat_obj,group.by = "geno",label = TRUE) + theme(aspect.ratio = 1)
+```
+
+
 ```{r}
 DimPlot(seurat_obj,label = TRUE,split.by = "geno") + theme(aspect.ratio = 1)
 
