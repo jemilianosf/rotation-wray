@@ -19,6 +19,7 @@ library(org.Mm.eg.db)
 
 tbr2_ensembl <- bitr("Eomes",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
 malat_ensembl <- bitr("Malat1",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
+fzd8_ensembl <- bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb =  org.Mm.eg.db)$ENSEMBL
 
 
 ```
@@ -31,8 +32,12 @@ seurat_obj <- NormalizeData(seurat_obj)
 VlnPlot(seurat_obj,tbr2_ensembl)
 ```
 ```{r}
-FeaturePlot(seurat_obj,tbr2_ensembl)
+library(ggplot2)
+FeaturePlot(seurat_obj,tbr2_ensembl) + theme(aspect.ratio = 1)
 
+```
+```{r}
+FeaturePlot(seurat_obj,fzd8_ensembl) + theme(aspect.ratio = 1)
 ```
 
 ```{r}
