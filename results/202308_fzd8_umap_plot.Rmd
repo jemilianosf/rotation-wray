@@ -1,0 +1,36 @@
+---
+title: "20230823_fzd8_umap_plot"
+output: html_document
+date: '2023-08-23'
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+```
+
+
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/litter2_no_integration_seurat_obj.Rds")
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+DefaultAssay(seurat_obj) <- "RNA"
+
+
+fzd8 <- bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+
+```{r}
+pdf("../data_output/20230823_fzd8_umap_plot.pdf")
+FeaturePlot(object = seurat_obj,features = fzd8,split.by ="orig.ident" ) +
+  theme(aspect.ratio = 1) 
+dev.off()
+```
+
