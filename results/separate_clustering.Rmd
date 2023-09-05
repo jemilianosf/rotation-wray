@@ -73,6 +73,23 @@ seurat_obj <- readRDS(file = "../data_output/surat_objects/wt2_seurat_obj.Rds")
 
 ```
 
+Write full list of marker genes
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+markers <- left_join(markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(markers, "../data_output/surat_objects/wt2_all_markers.csv")
+
+```
+
+
 
 Cell cycle
 ```{r eval = FALSE}
@@ -174,6 +191,25 @@ saveRDS(seurat_obj,file = "../data_output/surat_objects/hare5_seurat_obj.Rds")
 ```
 ```{r}
 seurat_obj <- readRDS(file = "../data_output/surat_objects/hare5_seurat_obj.Rds")
+
+```
+
+
+
+
+Write full list of marker genes
+```{r}
+markers <- FindAllMarkers(seurat_obj,min.pct = 0.25)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(markers$gene,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+markers <- left_join(markers,symbol_map, by =c("gene" = "ENSEMBL"))
+
+write.csv(markers, "../data_output/surat_objects/hare5_all_markers.csv")
 
 ```
 

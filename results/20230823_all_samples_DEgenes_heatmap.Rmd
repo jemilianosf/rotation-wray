@@ -1,0 +1,90 @@
+---
+title: "20230823_all_samples_DEgenes_heatmap"
+output: html_document
+date: '2023-08-23'
+---
+
+```{r}
+library(Seurat)
+library(tidyverse)
+```
+
+```{r}
+deg_pseudobulk_per_cluster <- read_csv("../data_output/surat_objects/deg_pseudobulk_per_cluster_fdr0.05_df.csv")
+```
+```{r}
+deg_pseudobulk_per_cluster$ENSEMBL
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(ComplexHeatmap)
+```
+
+```{r}
+lognormsummed <- readRDS("../data_output/osca_objects/lognormsummed_pseudobulk_de.Rds")
+lognormsummed <- lognormsummed[deg_pseudobulk_per_cluster$ENSEMBL]
+
+logcounts <- assay(lognormsummed,"logcounts")
+logcounts <- as.data.frame(t(logcounts))
+zscore_mat <- do.call(what = rbind, lapply(split(logcounts, lognormsummed$seurat_clusters), function(x){
+  scale(as.matrix(x), center = TRUE, scale = TRUE)
+}))
+zscore_mat <- t(zscore_mat)
+
+colnames(zscore_mat) <- paste(lognormsummed$seurat_clusters, lognormsummed$orig.ident)
+      
+id_gene_map <- unlist(deg_pseudobulk_per_cluster[,"SYMBOL"])
+names(id_gene_map) <- unlist(deg_pseudobulk_per_cluster[,"ENSEMBL"])
+
+rownames(zscore_mat) <- id_gene_map[rownames(zscore_mat)]
+
+
+deg_pseudobulk_per_cluster$cluster_fct
+
+
+Heatmap(mat = zscore_mat,
+          cluster_rows = FALSE,
+          show_row_dend = FALSE,
+          cluster_columns = FALSE,
+        cluster_row_slices = TRUE,
+        row_split = as.factor(sort(as.numeric(deg_pseudobulk_per_cluster$cluster))),
+        column_split = as.factor(sort(as.numeric(lognormsummed$seurat_clusters))) ,
+          heatmap_legend_param = list(title = "Z score",
+                                      legend_height = unit(2, "in")))
+```
+
+
+
+
+
+
+```{r}
+# Non functional / don't need anymore
+names_split_list <- str_split(colnames(zscore_mat)," ")
+
+names_split_list <- imap(names_split_list, function(.x,.y){
+  .x <- c(.x, .y)
+})
+
+names_split_list <- split(names_split_list,unlist(map(names_split_list, 1)))
+
+new_order <- unlist(names_split_list[as.character(sort(as.numeric(names(names_split_list))))],recursive = FALSE) %>% map(3) %>%unlist()
+
+zscore_mat <- zscore_mat[,as.numeric(new_order)]
+deg_pseudobulk_per_cluster <- deg_pseudobulk_per_cluster %>%
+  arrange(cluster) %>%
+  mutate(cluster_fct = as.factor(cluster))
+
+
+```
+
+
+
+```{r}
+pdf("../data_output/20230823_fzd8_umap_plot.pdf")
+FeaturePlot(object = seurat_obj,features = fzd8,split.by ="orig.ident" ) +
+  theme(aspect.ratio = 1) 
+dev.off()
+```
