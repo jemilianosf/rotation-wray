@@ -277,17 +277,36 @@ counts_plot <- as.data.frame(tabled_n_by_clust_aggregated) %>%
 
 
 ```{r}
-fit_ab$table %>%
+options(scipen = 9999999)
+big_cluster_df <- fit_ab$table %>%
   rownames_to_column(var ="clusters") %>%
   mutate(big_cluster = case_when(clusters %in% neurogenic ~ "neurogenic",
                                  clusters %in% cycling ~ "cycling",
-                                 clusters %in% progenitors ~ "progenitors")) %>%
+                                 clusters %in% progenitors ~ "progenitors")) 
+library(ggpubr)
+
+big_cluster_df %>%
   ggplot(aes(big_cluster, logFC)) +
   geom_boxplot() +
   geom_jitter() +
   theme_light() +
-  theme(aspect.ratio = 1)
+  theme(aspect.ratio = 1) +
+  stat_compare_means(method = "anova")
    
+```
+ANOVA
+```{r}
+library(broom)
+big_cluster_aov <- aov(formula = logFC ~ big_cluster, big_cluster_df)
+
+big_cluster_aov_tidy <- broom::tidy(big_cluster_aov)
+
+big_cluster_tukey_tidy <- broom::tidy(TukeyHSD(big_cluster_aov))
+
+write.csv(big_cluster_aov_tidy, "../data_output/surat_objects/tbr2_litter2_cluster_comparison_anova.csv")
+write.csv(big_cluster_tukey_tidy, "../data_output/surat_objects/tbr2_litter2_cluster_comparison_tukey.csv")
+
+
 ```
 
 
