@@ -1,0 +1,130 @@
+---
+title: "ambient_rna_tutorial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Ambient RNA tutorial
+Sometimes cells get contaminated by RNA from other cells that explode / low quality. This can affect DE between conditions if some cells are contaminated in one condition but not in the other one. 
+https://bioconductor.org/packages/release/bioc/vignettes/DropletUtils/inst/doc/DropletUtils.html
+
+# Read tutorial dataset
+```{r}
+library(MouseGastrulationData)
+sce.tal1 <- Tal1ChimeraData()
+
+library(scuttle)
+rownames(sce.tal1) <- uniquifyFeatureNames(
+    rowData(sce.tal1)$ENSEMBL, 
+    rowData(sce.tal1)$SYMBOL
+)
+sce.tal1
+
+```
+
+# DE analysis
+
+```{r}
+library(scran)
+summed.tal1 <- aggregateAcrossCells(sce.tal1, 
+    ids=DataFrame(sample=sce.tal1$sample,
+        label=sce.tal1$celltype.mapped)
+)
+summed.tal1$block <- summed.tal1$sample %% 2 == 0 # Add blocking factor.
+
+# Subset to our neural crest cells.
+summed.neural <- summed.tal1[,summed.tal1$label=="Neural crest"]
+summed.neural
+
+```
+
+In this part of the tutorial, they lay out the problem. TLDR, some DEGs are hemoglobins, which shouldn't be there in neural crest cells...   
+
+"We will perform a DE analysis between WT and KO cells labelled as “neural crest”. We observe that the strongest DEGs are the hemoglobins, which are downregulated in the injected cells. This is rather surprising as these cells are distinct from the erythroid lineage and should not express hemoglobins at all. The most sober explanation is that the background samples contain more hemoglobin transcripts in the ambient solution due to leakage from erythrocytes (or their precursors) during sorting and dissociation."
+
+
+```{r}
+# Standard edgeR analysis, as described in previous chapters.
+res.neural <- pseudoBulkDGE(summed.neural, 
+    label=summed.neural$label,
+    design=~factor(block) + tomato,
+    coef="tomatoTRUE",
+    condition=summed.neural$tomato)
+summarizeTestsPerLabel(decideTestsPerLabel(res.neural))
+
+```
+
+```{r}
+tab.neural <- res.neural[[1]]
+tab.neural <- tab.neural[order(tab.neural$PValue),]
+head(tab.neural, 10)
+
+```
+
+# Estimating ambient contamination
+
+Ambient profile:
+- First estimate "empty cells" as those < 100 counts
+- Then, get those empty cells and aggregate counts of these cells for each gene
+- Resulting vector is the "ambien profile" for that dataset
+
+```{r}
+library(DropletUtils)
+ambient <- vector("list", ncol(summed.neural))
+
+# Looping over all raw (unfiltered) count matrices and
+# computing the ambient profile based on its low-count barcodes.
+# Turning off rounding, as we know this is count data.
+for (s in seq_along(ambient)) {
+    raw.tal1 <- Tal1ChimeraData(type="raw", samples=s)[[1]]
+    ambient[[s]] <- ambientProfileEmpty(counts(raw.tal1), 
+        good.turing=FALSE, round=FALSE)
+}
+
+# Cleaning up the output for pretty printing.
+ambient <- do.call(cbind, ambient)
+colnames(ambient) <- seq_len(ncol(ambient))
+rownames(ambient) <- uniquifyFeatureNames(
+    rowData(raw.tal1)$ENSEMBL, 
+    rowData(raw.tal1)$SYMBOL
+)
+ambient
+```
+
+Clearly some of these genes make up a high proportion of counts.
+What is the max proportion of gene counts per sample that could be attribuited to ambience?
+
+```{r}
+max.ambient <- ambientContribMaximum(counts(summed.neural), 
+    ambient, mode="proportion")
+tail(max.ambient)
+
+ambientContribMaximum
+```
+
+```{r}
+# Averaging the ambient contribution across samples.
+contamination <- rowMeans(max.ambient, na.rm=TRUE)
+non.ambient <- contamination <= 0.1
+summary(non.ambient)
+
+
+```
+
+```{r}
+okay.genes <- names(non.ambient)[which(non.ambient)]
+tab.neural2 <- tab.neural[rownames(tab.neural) %in% okay.genes,]
+
+```
+
+```{r}
+tab.neural3 <- tab.neural
+tab.neural3$contamination <- contamination[rownames(tab.neural3)]
+
+head(tab.neural3,10)
+```
+
+
