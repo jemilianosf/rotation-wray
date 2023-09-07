@@ -1,0 +1,78 @@
+---
+title: "diff_abundance.Rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The aim of differential abundance is to see if there are changes in cell type composition.
+I will be following this chapter from OSCA: http://bioconductor.org/books/3.14/OSCA.multisample/differential-abundance.html
+
+
+Read in gastrulation dataset:
+```{r}
+merged <- readRDS("../data_output/mouse_gastru_merged.rds")
+
+```
+
+Compute abundances:
+```{r}
+abundances <- table(merged$celltype.mapped, merged$sample) 
+abundances <- unclass(abundances) 
+head(abundances)
+
+```
+
+```{r}
+library(edgeR)
+
+extra.info <- colData(merged)[match(colnames(abundances), merged$sample),]
+y.ab <- DGEList(abundances, samples=extra.info)
+y.ab
+
+```
+
+Filter low abundance cell types.
+
+```{r}
+keep <- filterByExpr(y.ab, group=y.ab$samples$tomato)
+y.ab <- y.ab[keep,]
+summary(keep)
+
+```
+
+Unlike differential expression, they don't recommend normalizing by composition.
+
+Design matrix
+```{r}
+design <- model.matrix(~factor(pool) + factor(tomato), y.ab$samples)
+
+```
+
+Estimate dispersion without trend (no enough points for reliable estimation of trended dispersion).
+```{r}
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+plotBCV(y.ab, cex=1)
+
+```
+QL dispersion
+```{r}
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+```
+
+Test differences
+```{r}
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+summary(decideTests(res))
+
+topTags(res)
+
+```
+
+
+
+
