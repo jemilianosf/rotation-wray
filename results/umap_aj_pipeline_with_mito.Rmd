@@ -1,0 +1,111 @@
+---
+title: "umap_aj_pipeline_with_mito"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(tinytex)
+library(patchwork)
+library(ggplot2)
+options(Seurat.memsafe = TRUE)
+```
+
+
+# All samples
+
+
+```{r}
+Mm_markers <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated_markers.rds")
+Mm_umap <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+```
+
+```{r}
+DimPlot(Mm_umap, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap, reduction = "umap", label = TRUE)
+```
+
+```{r}
+top_markers <- Mm_markers %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC)
+DoHeatmap(Mm_umap, features = top_markers$gene) + NoLegend()
+```
+
+```{r}
+FeaturePlot(Mm_umap, features = c("ENSMUSG00000027168"))
+
+```
+
+```{r}
+DotPlot(Mm_umap, features = top_markers$gene) + RotatedAxis()
+RidgePlot(Mm_umap, features = top_markers$gene)
+
+```
+
+```{r}
+FeaturePlot(Mm_umap, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+
+Mm_umap$log_nCount_RNA <- log10(Mm_umap$nCount_RNA+1)
+FeaturePlot(Mm_umap, reduction = "umap", features = "log_nCount_RNA") +
+  scale_color_viridis_c()
+
+FeaturePlot(Mm_umap, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+
+```
+
+
+```{r}
+rm(Mm_umap)
+gc()
+```
+
+# Two samples
+
+
+
+```{r}
+Mm_umap_subset <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_subset_mito_integrated.rds")
+Mm_markers_subset <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_subset_mito_integrated_markers.rds")
+```
+
+
+```{r}
+DimPlot(Mm_umap_subset, reduction = "umap", group.by = "sample")
+DimPlot(Mm_umap_subset, reduction = "umap", group.by = "geno", label = TRUE, repel = TRUE)
+DimPlot(Mm_umap_subset, reduction = "umap", label = TRUE)
+```
+
+```{r}
+top_markers_subset <- Mm_markers_subset %>% group_by(cluster) %>% top_n(n = 3, wt = avg_log2FC)
+DoHeatmap(Mm_umap_subset, features = top_markers_subset$gene) + NoLegend()
+```
+
+
+```{r}
+FeaturePlot(Mm_umap_subset, features = c("ENSMUSG00000027168"))
+```
+
+```{r}
+DotPlot(Mm_umap_subset, features = top_markers_subset$gene) + RotatedAxis()
+
+```
+
+```{r}
+FeaturePlot(Mm_umap_subset, reduction = "umap", features = "nFeature_RNA") +
+  scale_color_viridis_c()
+
+Mm_umap_subset$log_nCount_RNA <- log10(Mm_umap_subset$nCount_RNA+1)
+FeaturePlot(Mm_umap_subset, reduction = "umap", features = "log_nCount_RNA") +
+  scale_color_viridis_c()
+
+FeaturePlot(Mm_umap_subset, reduction = "umap", features = "percent.mt") +
+  scale_color_viridis_c()
+
+```
