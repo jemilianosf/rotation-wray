@@ -1,0 +1,147 @@
+---
+title: "cell_cycle_tutorial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cell cycle analysis 
+
+Here I follow the chapter from: http://bioconductor.org/books/3.14/OSCA.advanced/cell-cycle-assignment.html
+
+## Aim
+
+Cell cycle analysis is assigning a cell cycle phase (G1, S, G2, etc) to each cell. This information has been used as a nuissance factor with the assumption that differences in cell cycle stage between cells of the same cell type are not interesting, and can drive unwanted cluster separation. 
+
+In addition, in this case we are most interested in whether there are changes in cell cycle stages between experimental conditions.
+
+## Approaches
+- Cyclin genes
+- Reference profiles
+- Classifier
+
+## Prepare example dataset
+
+The example dataset:
+
+"the 416B dataset, which is known to contain actively cycling cells after oncogene induction"
+
+This is the script to prepare the example dataset.
+```{r}
+#--- loading ---#
+library(scRNAseq)
+sce.416b <- LunSpikeInData(which="416b") 
+sce.416b$block <- factor(sce.416b$block)
+
+#--- gene-annotation ---#
+library(AnnotationHub)
+ens.mm.v97 <- AnnotationHub()[["AH73905"]]
+rowData(sce.416b)$ENSEMBL <- rownames(sce.416b)
+rowData(sce.416b)$SYMBOL <- mapIds(ens.mm.v97, keys=rownames(sce.416b),
+    keytype="GENEID", column="SYMBOL")
+rowData(sce.416b)$SEQNAME <- mapIds(ens.mm.v97, keys=rownames(sce.416b),
+    keytype="GENEID", column="SEQNAME")
+
+library(scater)
+rownames(sce.416b) <- uniquifyFeatureNames(rowData(sce.416b)$ENSEMBL, 
+    rowData(sce.416b)$SYMBOL)
+
+#--- quality-control ---#
+mito <- which(rowData(sce.416b)$SEQNAME=="MT")
+stats <- perCellQCMetrics(sce.416b, subsets=list(Mt=mito))
+qc <- quickPerCellQC(stats, percent_subsets=c("subsets_Mt_percent",
+    "altexps_ERCC_percent"), batch=sce.416b$block)
+sce.416b <- sce.416b[,!qc$discard]
+
+#--- normalization ---#
+library(scran)
+sce.416b <- computeSumFactors(sce.416b)
+sce.416b <- logNormCounts(sce.416b)
+
+#--- variance-modelling ---#
+dec.416b <- modelGeneVarWithSpikes(sce.416b, "ERCC", block=sce.416b$block)
+chosen.hvgs <- getTopHVGs(dec.416b, prop=0.1)
+
+#--- batch-correction ---#
+library(limma)
+assay(sce.416b, "corrected") <- removeBatchEffect(logcounts(sce.416b), 
+    design=model.matrix(~sce.416b$phenotype), batch=sce.416b$block)
+
+#--- dimensionality-reduction ---#
+sce.416b <- runPCA(sce.416b, ncomponents=10, subset_row=chosen.hvgs,
+    exprs_values="corrected", BSPARAM=BiocSingular::ExactParam())
+
+set.seed(1010)
+sce.416b <- runTSNE(sce.416b, dimred="PCA", perplexity=10)
+
+#--- clustering ---#
+my.dist <- dist(reducedDim(sce.416b, "PCA"))
+my.tree <- hclust(my.dist, method="ward.D2")
+
+library(dynamicTreeCut)
+my.clusters <- unname(cutreeDynamic(my.tree, distM=as.matrix(my.dist),
+    minClusterSize=10, verbose=0))
+colLabels(sce.416b) <- factor(my.clusters)
+
+```
+
+## Using the cyclins
+
+G1 - Cyclin D peaks
+G1/S - Cyclin E
+S - Cyclin A
+S/G2 - Cyclin A
+G2/Mitosis - Cyclin B
+
+```{r}
+library(scater)
+cyclin.genes <- grep("^Ccn[abde][0-9]$", rowData(sce.416b)$SYMBOL)
+cyclin.genes <- rownames(sce.416b)[cyclin.genes]
+cyclin.genes
+
+```
+
+```{r}
+plotHeatmap(sce.416b, order_columns_by="label", 
+    cluster_rows=FALSE, features=sort(cyclin.genes))
+
+```
+
+## Reference profile
+
+I am not going to try this because I don't know if there is something like this for mouse cells. 
+
+## Cyclone classifier
+
+How it works:
+
+Also uses a reference dataset, but precomputed for mouse are available. 
+This dataset has cells in different cell cycle stages, finds DE genes between cell cycle stages, chooses these as markers. 
+
+Then, the sign of the markers in the test dataset are used to assign cells to stages.
+
+```{r}
+set.seed(100)
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(sce.416b, mm.pairs, gene.names=rowData(sce.416b)$ENSEMBL)
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+```{r}
+plotReducedDim(sce.416b,dimred = "TSNE", colour_by =  DataFrame(assignments$normalized.scores$G1))
+plotReducedDim(sce.416b,dimred = "TSNE", colour_by =  DataFrame(assignments$normalized.scores$G2))
+
+plotReducedDim(sce.416b,dimred = "TSNE", colour_by =  DataFrame(assignments$normalized.scores$S))
+
+plotReducedDim(sce.416b,dimred = "TSNE", colour_by =  DataFrame(assignments$phases))
+
+```
+
+
