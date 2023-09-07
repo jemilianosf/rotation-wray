@@ -1,0 +1,469 @@
+---
+title: "radial_glia_both_litters_analysis"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(tidyverse)
+options(Seurat.memsafe = TRUE)
+```
+# Radial glia analysis
+
+The aim of this analysis is to sub-cluster fzd8+ radial glial cells  to get a higher resolution clustering of this cell population. Using both samples to get DE genes.
+
+# Preprocessing
+
+
+
+Read seurat object
+```{r eval = FALSE}
+seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
+
+```
+New cluster assignments
+```{r eval = FALSE}
+DefaultAssay(seurat_obj) <- "integrated"
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+```{r eval = FALSE}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+DefaultAssay(seurat_obj) <- "RNA"
+
+
+fzd8 <- bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+seurat_obj <- NormalizeData(seurat_obj)
+
+FeaturePlot(object = seurat_obj,features = fzd8) +
+  theme(aspect.ratio = 1) 
+
+VlnPlot(object = seurat_obj, features = fzd8,sort = T) +
+  theme(aspect.ratio = 0.75)
+
+DimPlot(object = seurat_obj,label = T) +
+  theme(aspect.ratio = 1) 
+```
+
+
+```{r eval = FALSE}
+fzd8_clusters <- c("6","3","12","9","1","14")
+```
+
+# Filtering
+
+Keep cells from clusters annotated as tbr2+ intermediate progenitor neurons.
+```{r eval = FALSE}
+seurat_obj <- seurat_obj[,seurat_obj$seurat_clusters %in% fzd8_clusters]
+```
+
+
+# Clustering
+```{r eval = FALSE}
+DefaultAssay(seurat_obj) <- "integrated"
+
+seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = 100)
+
+seurat_obj <- RunUMAP(seurat_obj, reduction = "pca", dims = 1:20)
+
+seurat_obj <- FindNeighbors(object = seurat_obj, dims = 1:20)
+seurat_obj <- FindClusters(object = seurat_obj, resolution = 1.1)
+
+```
+```{r eval = FALSE}
+saveRDS(seurat_obj,file = "../data_output/surat_objects/fzd8_both_litters_seurat_obj.Rds")
+```
+
+
+```{r}
+seurat_obj <- readRDS(file = "../data_output/surat_objects/fzd8_both_litters_seurat_obj.Rds")
+
+```
+
+
+# Visualizing UMAP
+```{r}
+DimPlot(seurat_obj, label = TRUE, split.by = "geno") + theme(aspect.ratio = 1)
+```
+
+
+```{r}
+fzd8 <- bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+DefaultAssay(seurat_obj) <- "RNA"
+FeaturePlot(seurat_obj,features = fzd8) + theme(aspect.ratio = 1)
+
+```
+
+
+
+# Get markers
+```{r eval = FALSE}
+DefaultAssay(seurat_obj) <- "RNA"
+seurat_obj <- NormalizeData(seurat_obj)
+
+seurat_obj_conserved_markers_list <- lapply(levels(Idents(seurat_obj)), FindConservedMarkers, object = seurat_obj,grouping.var = "geno", verbose = FALSE )
+
+names(seurat_obj_conserved_markers_list) <- levels(Idents(seurat_obj))
+
+seurat_obj_conserved_markers_list_df <- do.call(rbind,imap(seurat_obj_conserved_markers_list, function(.x,.y) {
+  .x <- rownames_to_column(.x,var = "ensembl")
+  .x$cluster <- .y
+  return(.x)
+}))
+saveRDS(seurat_obj_conserved_markers_list_df, "../data_output/surat_objects/fzd8_both_litters_conserved_markers_list_df.rds")
+
+top30_markers <- seurat_obj_conserved_markers_list_df %>%
+  group_by(cluster) %>%
+  top_n(30,XP_avg_log2FC)
+
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+symbol_map <- bitr(top30_markers$ensembl,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+symbol_map <- symbol_map[!duplicated(symbol_map$ENSEMBL),]
+
+top30_markers <- left_join(top30_markers,symbol_map, by =c("ensembl" = "ENSEMBL"))
+
+write.csv(top30_markers, "../data_output/surat_objects/fzd8_all_samples_top30lfc_markers.csv")
+
+```
+
+# Tbr2
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+tbr2 <- bitr("Eomes",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+FeaturePlot(object = seurat_obj,features = tbr2) +
+  theme(aspect.ratio = 1) 
+
+VlnPlot(object = seurat_obj, features = tbr2) +
+  theme(aspect.ratio = 0.75)
+```
+
+
+# Fzd8 
+```{r}
+
+fzd8 <- bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+FeaturePlot(object = seurat_obj,features = fzd8) +
+  theme(aspect.ratio = 1)
+
+VlnPlot(object = seurat_obj, features = fzd8) +
+  theme(aspect.ratio = 0.75)
+```
+# Malat
+```{r}
+
+malat1 <- bitr("Malat1",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+seurat_obj$malat_percent <- PercentageFeatureSet(seurat_obj,features = malat1)
+
+FeaturePlot(object = seurat_obj,features = "malat_percent") +
+  theme(aspect.ratio = 1)
+
+VlnPlot(object = seurat_obj, features = "malat_percent") +
+  theme(aspect.ratio = 1)
+```
+
+```{r}
+seurat_obj@meta.data %>%
+  as_data_frame() %>%
+  ggplot(aes(seurat_clusters, fill =  geno)) +
+  geom_bar(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
+
+```
+
+```{r}
+tabled_n_by_clust <- table(seurat_obj@meta.data$seurat_clusters,seurat_obj@meta.data$geno)
+relative_tabled_n_by_clust <- tabled_n_by_clust
+relative_tabled_n_by_clust[,"WT"] <- relative_tabled_n_by_clust[,"WT"]/sum(relative_tabled_n_by_clust[,"WT"])
+relative_tabled_n_by_clust[,"XP"] <- relative_tabled_n_by_clust[,"XP"]/sum(relative_tabled_n_by_clust[,"XP"])
+
+as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal()
+
+```
+
+EdgeR
+```{r}
+library(scater)
+library(edgeR)
+sce_obj <- as.SingleCellExperiment(seurat_obj)
+
+abundances <- table(seurat_obj@meta.data$seurat_clusters,seurat_obj@meta.data$sample)
+
+abundances <- unclass(abundances) 
+
+
+extra_info <- colData(sce_obj)[match(colnames(abundances), sce_obj$sample),]
+
+extra_info$geno <- factor(extra_info$geno)
+y_ab <- DGEList(abundances, samples=extra_info)
+
+design <- model.matrix(~ geno, y_ab$samples)
+
+y_ab <- calcNormFactors(y_ab)
+
+y_ab <- estimateDisp(y_ab, design, trend="none")
+fit_ab <- glmQLFit(y_ab, design, robust=TRUE, abundance.trend=FALSE)
+
+res <- glmQLFTest(fit_ab, coef=ncol(design))
+summary(decideTests(res))
+
+res$table
+```
+
+
+```{r}
+
+as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  filter(seurat_clusters %in% rownames(res$table[res$table$logFC > 0.5,])) %>%
+  ggplot(aes(seurat_clusters,Freq, fill =  geno)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(type = "qual",palette = 7) +
+  theme_minimal() +
+  theme(aspect.ratio = 1)
+
+```
+
+# Cell cycle
+```{r eval = FALSE}
+set.seed(100)
+
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+    package="scran"))
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(sce_obj, mm.pairs, gene.names=rownames(sce_obj))
+saveRDS(assignments,"../data_output/osca_objects/cellcycle_assignments_fzd8_all_litters.rds")
+```
+
+
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+    xlab="G1 score", ylab="G2/M score", pch=16)
+
+```
+
+```{r}
+assignments <- readRDS("../data_output/osca_objects/cellcycle_assignments_fzd8_all_litters.rds")
+
+seurat_obj$G1 <- assignments$normalized.scores$G1
+seurat_obj$S <- assignments$normalized.scores$S
+seurat_obj$G2M <- assignments$normalized.scores$G2M
+seurat_obj$phases <- assignments$phases
+
+```
+
+```{r}
+FeaturePlot(seurat_obj,features = "G1")
+FeaturePlot(seurat_obj,features = "G2M")
+FeaturePlot(seurat_obj,features = "S")
+
+```
+
+```{r}
+DimPlot(seurat_obj,label = T) + theme(aspect.ratio = 1)
+
+DimPlot(seurat_obj,group.by  = "phases") + theme(aspect.ratio = 1)
+DimPlot(seurat_obj,group.by  = "phases", split.by = "geno") + theme(aspect.ratio = 1)
+
+```
+
+```{r}
+table(seurat_obj$seurat_clusters,paste(seurat_obj$phases,seurat_obj$geno,sep = "_"))
+```
+
+
+# Differential expression
+```{r}
+library(scran)
+library(scater)
+sce_obj <- SingleCellExperiment(assays = list(counts = seurat_obj@assays$RNA@counts), 
+                           colData = DataFrame(seurat_obj@meta.data))
+summed <- aggregateAcrossCells(sce_obj, 
+    id=colData(sce_obj)[,c("seurat_clusters","sample")])
+
+summed$batch <- substr(summed$sample,3,3)
+# Creating up a DGEList object for use in edgeR:
+library(edgeR)
+
+de_results <- pseudoBulkDGE(summed,
+                            sample = summed$sample,
+    label=summed$seurat_clusters,
+    design= ~ batch + geno,
+    contrast = "genoXP",
+    condition=summed$geno
+)
+```
+
+```{r}
+ambient_matrix <- readRDS(file = "../data_output/osca_objects/ambient_matrix.Rds")
+
+```
+
+
+```{r}
+
+  summed <- summed[rownames(summed) %in% rownames(ambient_matrix),]
+  
+  ambient_matrix <- ambient_matrix[rownames(summed), ]
+
+
+maxambients_per_clust <- map(unique(summed$seurat_clusters),function(.x, summed, ambient){
+  current_summed <- summed[,summed$seurat_clusters == .x]
+  
+  current_max_ambient <- DropletUtils::ambientContribMaximum(counts(current_summed), 
+                                               ambient_matrix, mode="proportion")
+  
+  
+  
+  currentcontamination <- rowMeans(current_max_ambient, na.rm=TRUE)
+  return(currentcontamination)
+}, summed = summed, ambient = ambient_matrix)
+
+
+names(maxambients_per_clust) <- unique(summed$seurat_clusters)
+```
+
+```{r}
+is_de <- decideTestsPerLabel(de_results, threshold=0.05)
+summarizeTestsPerLabel(is_de)
+
+```
+
+
+```{r}
+lognormsummed <- summed
+sizeFactors(lognormsummed) <- NULL
+lognormsummed <- logNormCounts(lognormsummed)
+
+```
+
+```{r}
+library("org.Mm.eg.db")
+
+de_results_df_list <- lapply(names(de_results),
+      function(clust,de_df, ambient_mat) {
+        x <- de_df[[clust]]
+        contamination <- ambient_mat[[clust]]
+        x <- as.data.frame(x)
+        x$cluster <- clust
+        x$contamination <- contamination[rownames(x)]
+        x <-rownames_to_column(x,var = "ENSEMBL")
+        
+        return(x)
+      }, de_df = de_results, ambient_mat = maxambients_per_clust)
+
+
+de_results_df <- do.call(rbind,de_results_df_list)
+
+ens2symbol <- clusterProfiler::bitr(de_results_df$ENSEMBL,fromType = "ENSEMBL",toType = "SYMBOL",OrgDb = org.Mm.eg.db)
+
+de_results_df <- left_join(de_results_df, ens2symbol,by= "ENSEMBL")
+de_results_df <- drop_na(de_results_df)
+```
+
+```{r}
+de_results_df_filt <- de_results_df[de_results_df$FDR < 0.05 & de_results_df$contamination < 0.05,]
+```
+```{r}
+write.csv(de_results_df,file = "../data_output/surat_objects/fzd8_clusters_deg_all.csv")
+```
+
+```{r}
+write.csv(de_results_df_filt,file = "../data_output/surat_objects/fzd8_clusters_deg_fdr05_contamination_05.csv")
+```
+
+```{r}
+de_results_df %>%
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 & contamination < 0.05)) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  theme_light() +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~cluster) +
+  ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
+                           data = de_results_df %>%
+                             filter(FDR < 0.05 & contamination < 0.05),
+                           color = "black",
+                           max.overlaps = 30,
+                           size = 3) 
+
+```
+Show only WNT signaling genes
+```{r}
+
+mmu_kegg <- clusterProfiler::download_KEGG(species ="mmu")
+
+wnt_pathway <- mmu_kegg$KEGGPATHID2NAME[str_detect(mmu_kegg$KEGGPATHID2NAME$to,"W"), ]
+
+wnt_pathway_entrez_genes <- mmu_kegg$KEGGPATHID2EXTID %>%
+  filter(from == wnt_pathway$from )
+
+wnt_pathway_genes <- clusterProfiler::bitr(wnt_pathway_entrez_genes$to,OrgDb = org.Mm.eg.db,fromType = "ENTREZID",toType=c("ENSEMBL","SYMBOL"))
+
+
+```
+
+```{r}
+de_results_df %>%
+  ggplot(aes(logCPM, logFC, color = FDR < 0.05 &contamination < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL )) +
+  geom_point(size = 0.5, pch = 1) +
+  scale_color_manual(values = c("TRUE" = "red","FALSE"="darkgray")) +
+  theme_light() +
+  theme(aspect.ratio = 1,legend.position = "none") +
+  facet_wrap(~cluster) +
+  ggrepel::geom_text_repel(mapping = aes(label = SYMBOL),
+                           data = de_results_df %>%
+                             filter(FDR < 0.05 & contamination < 0.05 & ENSEMBL %in% wnt_pathway_genes$ENSEMBL),
+                           color = "black",
+                           max.overlaps = 30,
+                           size = 3) 
+
+```
+
+
+```{r}
+DefaultAssay(seurat_obj) <- "RNA"
+
+seurat_obj <- NormalizeData(seurat_obj)
+
+Uba52 <- bitr("Uba52",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+FeaturePlot(object = seurat_obj,features = Uba52,split.by = "geno") +
+  theme(aspect.ratio = 1)
+
+VlnPlot(object = seurat_obj, features = Uba52,split.by = "geno") +
+  theme(aspect.ratio = 0.75)
+```
+```{r}
+
+H3c2 <- bitr("H3c2",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db)$ENSEMBL
+
+FeaturePlot(object = seurat_obj,features = H3c2,split.by = "geno") +
+  theme(aspect.ratio = 1)
+
+VlnPlot(object = seurat_obj, features = H3c2,split.by = "geno") +
+  theme(aspect.ratio = 0.75)
+```
