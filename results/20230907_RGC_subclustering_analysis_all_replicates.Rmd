@@ -221,6 +221,13 @@ as.data.frame(relative_tabled_n_by_clust) %>%
   theme_minimal()
 dev.off()
 ```
+```{r}
+as.data.frame(relative_tabled_n_by_clust) %>%
+  mutate(seurat_clusters = Var1,
+         geno = Var2) %>%
+  select("Freq","seurat_clusters","geno") %>%
+  write_csv(., file = "../data_output/20231011_rgc_both_litters_abundance_table.csv")
+```
 
 
 

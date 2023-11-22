@@ -20,6 +20,43 @@ Read seurat object
 seurat_obj <- readRDS("../data_output/surat_objects/run_8nov21/Mm_merged_mito_mito_integrated.rds")
 
 ```
+
+```{r}
+pdf("../data_output/20231121_fig2o_clusters_all_samples.pdf",width = 5,height = 5)
+DimPlot(seurat_obj, label = TRUE) + theme(aspect.ratio = 1)
+dev.off()
+```
+
+```{r}
+DefaultAssay(seurat_obj) <- "RNA"
+
+
+fzd8 <- clusterProfiler::bitr("Fzd8",fromType = "SYMBOL",toType = "ENSEMBL",OrgDb = org.Mm.eg.db::org.Mm.eg.db)$ENSEMBL
+
+FeaturePlot(object = seurat_obj,features = fzd8) +
+  theme(aspect.ratio = 1) 
+
+VlnPlot(object = seurat_obj, features = fzd8) +
+  theme(aspect.ratio = 0.75)
+
+```
+```{r}
+DefaultAssay(seurat_obj) <- "RNA"
+
+
+seurat_obj <- NormalizeData(seurat_obj)
+
+
+
+```
+```{r}
+pdf("../data_output/20231121_figS4b_fzd8_violin_plots.pdf")
+VlnPlot(object = seurat_obj[,seurat_obj$seurat_clusters %in% c("0","1","10","11","9")],pt.size = FALSE, split.by = "geno",features = fzd8) +
+  theme(aspect.ratio = 0.5)
+dev.off()
+```
+
+
 New cluster assignments
 ```{r eval = FALSE}
 DefaultAssay(seurat_obj) <- "integrated"
@@ -279,8 +316,9 @@ FeaturePlot(seurat_obj,features = "S")
 ```
 
 ```{r}
-DimPlot(seurat_obj,group.by  = "phases") + theme(aspect.ratio = 1)
-
+pdf("../data_output/20231019_ip_both_litters_split_geno_phases.pdf")
+DimPlot(seurat_obj,group.by  = "phases", split.by = "geno") + theme(aspect.ratio = 1)
+dev.off()
 ```
 
 ```{r}
